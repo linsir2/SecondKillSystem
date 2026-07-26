@@ -1,0 +1,87 @@
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: seckill-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PWD:-root}
+      MYSQL_DATABASE: ${MYSQL_DB:-seckill_dev}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.d:/docker-entrypoint-initdb.d
+    networks:
+      - seckill-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: seckill-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - seckill-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: seckill-rmq-namesrv
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    volumes:
+      - rmq-namesrv-logs:/home/rocketmq/logs
+    networks:
+      - seckill-net
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: seckill-rmq-broker
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_started
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    volumes:
+      - rmq-broker-logs:/home/rocketmq/logs
+      - rmq-broker-store:/home/rocketmq/store
+      - ./rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+    networks:
+      - seckill-net
+
+  rocketmq-dashboard:
+    image: apacherocketmq/rocketmq-dashboard:latest
+    container_name: seckill-rmq-dashboard
+    ports:
+      - "8081:8080"
+    environment:
+      JAVA_OPTS: -Drocketmq.namesrv.addr=rocketmq-namesrv:9876
+    depends_on:
+      - rocketmq-namesrv
+    networks:
+      - seckill-net
+
+volumes:
+  mysql-data:
+  redis-data:
+  rmq-namesrv-logs:
+  rmq-broker-logs:
+  rmq-broker-store:
+
+networks:
+  seckill-net:
+    driver: bridge
