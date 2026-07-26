@@ -1,6 +1,6 @@
 ## 数据库表
 
-### 个人信息表 —— user
+### 个人信息表 —— sys_user
 
 | 字段名 | 约束 | 说明 |
 | --- | --- | --- |
@@ -9,6 +9,7 @@
 | email | 唯一，Unique, varchar(255) |  |
 | password | varchar(255) | Argon2id 密码哈希 |
 | role | ENUM[’admin’, ‘merchant’, ‘user’] | 角色 |
+| ban_status | ENUM('normal', 'banned') | 封禁状态，默认 normal。封禁后无法参与抢购 |
 | created_at | datetime |  |
 | updated_at | datetime |  |
 

@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 秒杀系统（Seckill / Flash Sale System）—— 高并发、高可用秒杀架构练习项目。
 
 完整需求文档见 `.claude/docs/prd.md`，数据库设计见 `.claude/docs/sql.md`。
+DDD 领域分析见 `.claude/docs/ddd.md`，开发注意事项见 `.claude/docs/注意事项.md`。
 
 ## 技术栈
 
@@ -128,7 +129,7 @@ SchedulerX 兜底悬空死账：ZRANGEBYSCORE 按窗口扫描 → 比对 MySQL �
 
 ## 数据库表
 
-- **user** — 雪花算法 ID，Argon2id 密码哈希，角色 ENUM(admin, merchant, user)
+- **sys_user** — 雪花算法 ID，Argon2id 密码哈希，角色 ENUM(admin, merchant, user)（原名 `user`，因 MySQL 保留字改名）
 - **goods** — 普通商品，unique(goods_id, merchant_id)，stock 总库存
 - **seckill_goods** — 秒杀商品，unique(activity_id, goods_id)，seckill_price, limit_num
 - **activity** — 秒杀活动，status ENUM(draft, pending, preheating, running, ended)
@@ -157,6 +158,28 @@ seckill:pending:{activityId}                   排队凭证 zset（score=时间�
 - 高知识密度，不做冗余封装
 - 最小必要代码，不预支抽象
 - 触及架构/安全/库存一致性时主动刹车确认
+
+## TDD 铁律
+
+**RED → GREEN → REFACTOR，严格顺序，不可颠倒。**
+
+```
+1. RED:  先写测试（只写测试文件，产品代码不存在）→ mvn test 必须失败
+2. GREEN: 写最少产品代码让测试通过 → mvn test 全绿
+3. REFACTOR: 清理代码结构，测试保持全绿 → 下一轮
+```
+
+**规则：**
+
+- 绝不先写产品代码再补测试。测试文件创建时，被测类/Lua脚本应尚未存在
+- 一个测试方法只断一个语义（正常路径 / 边界 / 异常）
+- 测试不用 Spring 上下文就尽量不用——纯 Jedis/纯 JUnit 跑得快
+- Redis 相关测试直连 docker-compose Redis（`localhost:6379`），`@BeforeEach FLUSHALL` 保证隔离
+- Testcontainers 暂不可用（docker-java ↔ Docker Engine 29.4.0 不兼容），待升级后切回
+
+**Lua 脚本 TDD 特例：**
+- Lua 脚本从 classpath 加载（`src/main/resources/lua/`）
+- 测试通过 `Jedis.eval(script, keys, args)` 直接执行 `src/main/resources/lua/*.lua` 源文件
 
 ## 常用命令
 
