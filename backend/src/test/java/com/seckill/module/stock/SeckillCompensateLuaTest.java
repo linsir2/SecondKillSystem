@@ -86,7 +86,7 @@ class SeckillCompensateLuaTest {
     }
 
     @Test
-    @DisplayName("CL3 补偿不存在的 token → ZREM 幂等, 不影响其他 token")
+    @DisplayName("CL3 补偿不存在的 token → ZREM 返回 0 → 跳过全部（幂等安全）")
     void shouldHandleNonExistentToken() {
         jedis.set(STOCK_KEY, "8");
         jedis.sadd(USERS_KEY, String.valueOf(USER_A));
@@ -94,10 +94,10 @@ class SeckillCompensateLuaTest {
 
         eval(USER_A, 2, "nonexistent-token");
 
-        assertEquals("10", jedis.get(STOCK_KEY));
-        assertFalse(jedis.sismember(USERS_KEY, String.valueOf(USER_A)));
-        // TOKEN_2 不受影响
-        assertNotNull(jedis.zscore(PENDING_KEY, TOKEN_2));
+        // ZREM 返回 0 → 跳过 INCRBY 和 SREM（幂等安全，防止双倍补偿）
+        assertEquals("8", jedis.get(STOCK_KEY));                 // INCRBY 未执行
+        assertTrue(jedis.sismember(USERS_KEY, String.valueOf(USER_A))); // SREM 未执行
+        assertNotNull(jedis.zscore(PENDING_KEY, TOKEN_2));      // TOKEN_2 不受影响
     }
 
     @Test

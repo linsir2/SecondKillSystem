@@ -11,6 +11,7 @@ import com.seckill.module.order.model.enums.OrderStatus;
 import com.seckill.module.order.model.enums.SendStatus;
 import com.seckill.module.order.model.dto.OrderCancelledEvent;
 import com.seckill.module.order.model.dto.OrderPaidEvent;
+import com.seckill.module.order.model.dto.OrderTimedOutEvent;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -737,5 +738,175 @@ class OrderServiceImplTest {
     void statusCancelled() {
         when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.CANCELLED));
         assertEquals("CANCELLED", orderService.getOrderStatus(ORDER_TOKEN));
+    }
+
+    // ========================================================================
+    // 十二、超时取消 TO1-TO11
+    // ========================================================================
+
+    @Test
+    @DisplayName("TO1 orderToken null -> IAE")
+    void cancelByTimeoutNullToken() {
+        assertIAE(() -> orderService.cancelByTimeout(null), "orderToken");
+    }
+
+    @Test
+    @DisplayName("TO2 orderToken blank -> IAE")
+    void cancelByTimeoutBlankToken() {
+        assertIAE(() -> orderService.cancelByTimeout(""), "orderToken");
+        assertIAE(() -> orderService.cancelByTimeout("  "), "orderToken");
+    }
+
+    @Test
+    @DisplayName("TO3 UNPAID -> CANCELLED, 乐观锁命中, OrderTimedOutEvent 含全字段")
+    void cancelByTimeoutSuccess() {
+        when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.UNPAID));
+        when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(1);
+
+        orderService.cancelByTimeout(ORDER_TOKEN);
+
+        var captor = ArgumentCaptor.forClass(SeckillOrder.class);
+        verify(orderMapper).update(captor.capture(), any());
+        assertEquals(OrderStatus.CANCELLED, captor.getValue().getStatus());
+        assertNotNull(captor.getValue().getCancelTime());
+
+        var evtCaptor = ArgumentCaptor.forClass(OrderTimedOutEvent.class);
+        verify(eventPublisher).publishEvent(evtCaptor.capture());
+        var evt = evtCaptor.getValue();
+        assertEquals(ORDER_TOKEN, evt.orderToken());
+        assertEquals(ORDER_NO, evt.orderNo());
+        assertEquals(ACTIVITY_ID, evt.activityId());
+        assertEquals(GOODS_ID, evt.seckillGoodsId());
+        assertEquals(USER_A, evt.userId());
+        assertEquals(2, evt.buyCount());
+    }
+
+    @Test
+    @DisplayName("TO4 订单不存在 -> BusinessException")
+    void cancelByTimeoutNotFound() {
+        when(orderMapper.selectOne(any())).thenReturn(null);
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("不存在"));
+    }
+
+    @Test
+    @DisplayName("TO5 已 PAID -> BusinessException")
+    void cancelByTimeoutAlreadyPaid() {
+        when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.PAID));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("只能取消待支付订单"));
+    }
+
+    @Test
+    @DisplayName("TO6 已 CANCELLED -> BusinessException")
+    void cancelByTimeoutAlreadyCancelled() {
+        when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.CANCELLED));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("只能取消待支付订单"));
+    }
+
+    @Test
+    @DisplayName("TO7 乐观锁冲突 -> 重查为 PAID -> BusinessException(已支付)")
+    void cancelByTimeoutConflictThenPaid() {
+        when(orderMapper.selectOne(any()))
+                .thenReturn(orderWithStatus(OrderStatus.UNPAID))
+                .thenReturn(orderWithStatus(OrderStatus.PAID));
+        when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
+
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("已支付"));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("TO8 乐观锁冲突 -> 重查为 CANCELLED -> BusinessException(已取消)")
+    void cancelByTimeoutConflictThenCancelled() {
+        when(orderMapper.selectOne(any()))
+                .thenReturn(orderWithStatus(OrderStatus.UNPAID))
+                .thenReturn(orderWithStatus(OrderStatus.CANCELLED));
+        when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
+
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("已取消"));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("TO9 乐观锁冲突 -> 重查为 null -> BusinessException(不存在)")
+    void cancelByTimeoutConflictThenNull() {
+        when(orderMapper.selectOne(any()))
+                .thenReturn(orderWithStatus(OrderStatus.UNPAID))
+                .thenReturn(null);
+        when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
+
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancelByTimeout(ORDER_TOKEN));
+        assertTrue(ex.getMessage().contains("不存在"));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("TO10 两线程同时超时取消同订单 -> 恰好一个成功, 事件只发 1 次")
+    void cancelByTimeoutConcurrentTwoThreads() throws Exception {
+        var unpaid = orderWithStatus(OrderStatus.UNPAID);
+        var cancelled = orderWithStatus(OrderStatus.CANCELLED);
+
+        var selectN = new AtomicInteger(0);
+        doAnswer(inv -> selectN.getAndIncrement() < 2 ? unpaid : cancelled)
+                .when(orderMapper).selectOne(any());
+
+        var updateN = new AtomicInteger(0);
+        doAnswer(inv -> updateN.getAndIncrement() == 0 ? 1 : 0)
+                .when(orderMapper).update(any(SeckillOrder.class), any());
+
+        var latch = new CountDownLatch(2);
+        var results = Collections.synchronizedList(new ArrayList<String>());
+
+        for (int i = 0; i < 2; i++) {
+            new Thread(() -> {
+                try { orderService.cancelByTimeout(ORDER_TOKEN); results.add("success"); }
+                catch (BusinessException e) { results.add(e.getMessage()); }
+                finally { latch.countDown(); }
+            }).start();
+        }
+        latch.await();
+
+        assertEquals(2, results.size());
+        assertEquals(1, results.stream().filter("success"::equals).count());
+        verify(eventPublisher, times(1)).publishEvent(any(OrderTimedOutEvent.class));
+    }
+
+    @Test
+    @DisplayName("TO11 支付 vs 超时取消并发 -> 最多一个成功")
+    void cancelByTimeoutAndPayConcurrent() throws Exception {
+        var unpaid = orderWithStatus(OrderStatus.UNPAID);
+        // 每个 select 调用返回新对象避免实体状态被共享修改
+        doAnswer(inv -> orderWithStatus(OrderStatus.UNPAID))
+                .when(orderMapper).selectOne(any());
+        doAnswer(inv -> orderWithStatus(OrderStatus.UNPAID))
+                .when(orderMapper).selectById(ORDER_NO);
+
+        var updateN = new AtomicInteger(0);
+        doAnswer(inv -> updateN.getAndIncrement() == 0 ? 1 : 0)
+                .when(orderMapper).update(any(SeckillOrder.class), any());
+
+        var latch = new CountDownLatch(2);
+        var results = Collections.synchronizedList(new ArrayList<String>());
+
+        new Thread(() -> {
+            try { orderService.cancelByTimeout(ORDER_TOKEN); results.add("timeout_ok"); }
+            catch (BusinessException e) { results.add("timeout:" + e.getMessage()); }
+            finally { latch.countDown(); }
+        }).start();
+        new Thread(() -> {
+            try { orderService.pay(ORDER_NO); results.add("pay_ok"); }
+            catch (BusinessException e) { results.add("pay:" + e.getMessage()); }
+            finally { latch.countDown(); }
+        }).start();
+        latch.await();
+
+        assertEquals(2, results.size());
+        long successCount = results.stream().filter(r -> r.endsWith("_ok")).count();
+        assertEquals(1, successCount, "恰好一个操作成功");
+        verify(eventPublisher, times(1)).publishEvent(any(Object.class));
     }
 }

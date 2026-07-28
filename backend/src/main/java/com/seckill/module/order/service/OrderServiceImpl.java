@@ -9,6 +9,7 @@ import com.seckill.module.order.mapper.MessageLogMapper;
 import com.seckill.module.order.mapper.SeckillOrderMapper;
 import com.seckill.module.order.model.dto.OrderCancelledEvent;
 import com.seckill.module.order.model.dto.OrderPaidEvent;
+import com.seckill.module.order.model.dto.OrderTimedOutEvent;
 import com.seckill.module.order.model.entity.MessageLog;
 import com.seckill.module.order.model.entity.SeckillOrder;
 import com.seckill.module.order.model.enums.OrderStatus;
@@ -172,6 +173,50 @@ public class OrderServiceImpl implements OrderService {
 
         // ---- 5. 领域事件 ----
         eventPublisher.publishEvent(new OrderCancelledEvent(orderNo, order.getOrderToken()));
+    }
+
+    // ========================================================================
+    // 超时取消
+    // ========================================================================
+
+    @Override
+    public void cancelByTimeout(String orderToken) {
+        if (orderToken == null || orderToken.isBlank())
+            throw new IllegalArgumentException("orderToken must not be blank");
+
+        // ---- 1. 按 orderToken 查询 ----
+        SeckillOrder order = orderMapper.selectOne(
+                new QueryWrapper<SeckillOrder>().eq("order_token", orderToken));
+        if (order == null) throw new BusinessException("订单不存在");
+
+        // ---- 2. 实体领域行为 ----
+        try {
+            order.cancel();
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
+
+        // ---- 3. 乐观锁写库 ----
+        LambdaUpdateWrapper<SeckillOrder> wrapper = new LambdaUpdateWrapper<SeckillOrder>()
+                .eq(SeckillOrder::getOrderNo, order.getOrderNo())
+                .eq(SeckillOrder::getStatus, OrderStatus.UNPAID);
+        int affected = orderMapper.update(order, wrapper);
+
+        // ---- 4. 冲突处理 ----
+        if (affected == 0) {
+            SeckillOrder current = orderMapper.selectOne(
+                    new QueryWrapper<SeckillOrder>().eq("order_token", orderToken));
+            if (current == null) throw new BusinessException("订单不存在");
+            if (current.getStatus() == OrderStatus.PAID) throw new BusinessException("订单已支付");
+            if (current.getStatus() == OrderStatus.CANCELLED) throw new BusinessException("订单已取消");
+            throw new BusinessException("订单状态异常");
+        }
+
+        // ---- 5. 领域事件（含 Redis 补偿所需全字段） ----
+        eventPublisher.publishEvent(new OrderTimedOutEvent(
+                order.getOrderNo(), order.getOrderToken(),
+                order.getActivityId(), order.getSeckillGoodsId(),
+                order.getUserId(), order.getBuyCount()));
     }
 
     // ========================================================================

@@ -51,6 +51,22 @@ public interface OrderService {
     void cancel(Long orderNo);
 
     /**
+     * 超时取消订单 UNPAID → CANCELLED。
+     *
+     * <p>由延时关单消费者调用。与 {@link #cancel(Long)} 的区别：
+     * <ul>
+     *   <li>按 orderToken 查询而非 orderNo</li>
+     *   <li>发布 {@link com.seckill.module.order.model.dto.OrderTimedOutEvent}
+     *       而非 {@link com.seckill.module.order.model.dto.OrderCancelledEvent}</li>
+     * </ul>
+     *
+     * @param orderToken 排队凭证（不可 null/blank）
+     * @throws IllegalArgumentException orderToken 不合法
+     * @throws com.seckill.common.exception.BusinessException 订单不存在 / 已支付 / 已取消
+     */
+    void cancelByTimeout(String orderToken);
+
+    /**
      * 查询订单状态（前端轮询用）。
      *
      * @param orderToken 排队凭证

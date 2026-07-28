@@ -293,6 +293,80 @@ class SeckillStockServiceTest {
     }
 
     // ================================================================
+    // C1-C5: compensateByTimeout
+    // ================================================================
+
+    @Test
+    @DisplayName("C1 正常补偿: stock++, users SREM, pending ZREM")
+    void compensateNormal() {
+        warmup(3, 5);
+        var result = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
+        String token = result.orderToken();
+
+        assertNotNull(redisTemplate.opsForValue().get(stockKey));
+        assertEquals(1L, redisTemplate.opsForSet().size(usersKey));
+        assertEquals(1L, redisTemplate.opsForZSet().size(pendingKey));
+
+        // 用实际 token 补偿（Lua ZREM-as-lock 要求 token 必须匹配）
+        seckillStockService.compensateByTimeout(ACTIVITY_ID, GOODS_ID, USER_A, 2, token);
+
+        // stock: 3(warmup) - 2(deduct) + 2(compensate) = 3
+        assertEquals("3", redisTemplate.opsForValue().get(stockKey));
+        assertEquals(0L, redisTemplate.opsForSet().size(usersKey));
+        assertEquals(0L, redisTemplate.opsForZSet().size(pendingKey));
+    }
+
+    @Test
+    @DisplayName("C2 补偿后其他用户可正常抢购")
+    void compensateThenAnotherCanBuy() {
+        warmup(5, 5);
+        var r1 = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 3);
+
+        seckillStockService.compensateByTimeout(ACTIVITY_ID, GOODS_ID, USER_A, 3, r1.orderToken());
+
+        // B 可抢
+        SeckillDeductResult br = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_B, 1);
+        assertEquals(SeckillDeductResult.CODE_SUCCESS, br.code());
+
+        assertEquals("4", redisTemplate.opsForValue().get(stockKey));
+        assertEquals(1L, redisTemplate.opsForSet().size(usersKey));
+    }
+
+    // ================================================================
+    // V — 参数校验
+    // ================================================================
+
+    @Test
+    @DisplayName("V1 activityId null -> IAE")
+    void compensateNullActivityId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> seckillStockService.compensateByTimeout(null, GOODS_ID, USER_A, 1, "t"));
+    }
+
+    @Test
+    @DisplayName("V2 seckillGoodsId null -> IAE")
+    void compensateNullGoodsId() {
+        assertThrows(IllegalArgumentException.class,
+                () -> seckillStockService.compensateByTimeout(ACTIVITY_ID, null, USER_A, 1, "t"));
+    }
+
+    @Test
+    @DisplayName("V3 buyCount <=0 -> IAE")
+    void compensateInvalidBuyCount() {
+        assertThrows(IllegalArgumentException.class,
+                () -> seckillStockService.compensateByTimeout(ACTIVITY_ID, GOODS_ID, USER_A, 0, "t"));
+        assertThrows(IllegalArgumentException.class,
+                () -> seckillStockService.compensateByTimeout(ACTIVITY_ID, GOODS_ID, USER_A, -1, "t"));
+    }
+
+    @Test
+    @DisplayName("V4 orderToken null -> IAE")
+    void compensateNullToken() {
+        assertThrows(IllegalArgumentException.class,
+                () -> seckillStockService.compensateByTimeout(ACTIVITY_ID, GOODS_ID, USER_A, 1, null));
+    }
+
+    // ================================================================
     // helper
     // ================================================================
 

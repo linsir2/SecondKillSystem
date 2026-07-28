@@ -77,6 +77,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring AOP (for @Retryable, @Transactional proxy) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- Spring Retry -->
         <dependency>
             <groupId>org.springframework.retry</groupId>
