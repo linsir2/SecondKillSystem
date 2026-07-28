@@ -2,6 +2,7 @@ package com.seckill.module.activity.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.seckill.common.constant.BanStatus;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
@@ -16,8 +17,11 @@ import com.seckill.module.activity.model.vo.ActivityVO;
 import com.seckill.module.activity.model.vo.SeckillGoodsVO;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
+import com.seckill.module.user.mapper.SysUserMapper;
+import com.seckill.module.user.model.entity.SysUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +47,8 @@ public class ActivityService {
     private final SeckillGoodsMapper seckillGoodsMapper;
     private final GoodsService goodsService;
     private final ApplicationEventPublisher eventPublisher;
+    private final StringRedisTemplate redisTemplate;
+    private final SysUserMapper sysUserMapper;
 
     // ========================================================================
     // 创建草稿
@@ -365,5 +371,64 @@ public class ActivityService {
         // ---- 组装 VO ----
         List<SeckillGoodsVO> goodsVOs = buildSubmitGoodsVOs(seckillGoodsList, goodsInfos);
         return buildVO(activity, goodsVOs);
+    }
+
+    // ========================================================================
+    // 预热（T-10 分钟定时任务触发）
+    // ========================================================================
+
+    private static final String BLACKLIST_KEY = "seckill:blacklist";
+
+    /**
+     * 预热活动数据到 Redis：库存 key + 限购 key + 黑名单。
+     * <p>幂等，可重复调用。活动状态不变（仍为 preheating）。</p>
+     */
+    public void preheatActivity(Long activityId) {
+        // ---- 库存预热 ----
+        List<SeckillGoods> sgList = seckillGoodsMapper.selectList(
+                new LambdaQueryWrapper<SeckillGoods>().eq(SeckillGoods::getActivityId, activityId));
+        for (SeckillGoods sg : sgList) {
+            String stockKey = redisKey("stock", activityId, sg.getSeckillGoodsId());
+            String limitKey = redisKey("limit", activityId, sg.getSeckillGoodsId());
+            redisTemplate.opsForValue().set(stockKey, String.valueOf(sg.getStock()));
+            redisTemplate.opsForValue().set(limitKey, String.valueOf(sg.getLimitNum()));
+        }
+
+        // ---- 黑名单预热 ----
+        List<SysUser> banned = sysUserMapper.selectList(
+                new LambdaQueryWrapper<SysUser>().eq(SysUser::getBanStatus, BanStatus.banned));
+        redisTemplate.delete(BLACKLIST_KEY);
+        for (SysUser user : banned) {
+            redisTemplate.opsForSet().add(BLACKLIST_KEY, String.valueOf(user.getUserId()));
+        }
+    }
+
+    // ========================================================================
+    // 启动活动（start_time 到达时触发）
+    // ========================================================================
+
+    /**
+     * preheating → running。
+     * <p>乐观锁防止重复转换，状态不匹配时幂等跳过。</p>
+     */
+    @Transactional
+    public void startActivity(Long activityId) {
+        Activity activity = activityMapper.selectById(activityId);
+        if (activity == null) return;
+        if (activity.getStatus() != ActivityStatus.preheating) return;
+
+        activity.start();
+
+        LambdaUpdateWrapper<Activity> wrapper = new LambdaUpdateWrapper<Activity>()
+                .eq(Activity::getActivityId, activityId)
+                .eq(Activity::getStatus, ActivityStatus.preheating);
+        int affected = activityMapper.update(activity, wrapper);
+        if (affected == 0) {
+            throw new BusinessException("活动启动失败，请刷新重试");
+        }
+    }
+
+    private static String redisKey(String prefix, Long activityId, Long seckillGoodsId) {
+        return "seckill:" + prefix + ":" + activityId + ":" + seckillGoodsId;
     }
 }

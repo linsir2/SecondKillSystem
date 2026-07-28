@@ -1,5 +1,6 @@
 package com.seckill.module.activity.service;
 
+import com.seckill.common.constant.BanStatus;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
@@ -13,7 +14,12 @@ import com.seckill.module.activity.model.enums.ActivityStatus;
 import com.seckill.module.activity.model.vo.ActivityVO;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
+import com.seckill.module.user.mapper.SysUserMapper;
+import com.seckill.module.user.model.entity.SysUser;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.ValueOperations;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -54,6 +60,14 @@ class ActivityServiceTest {
     private GoodsService goodsService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private StringRedisTemplate redisTemplate;
+    @Mock
+    private ValueOperations<String, String> valueOps;
+    @Mock
+    private SetOperations<String, String> setOps;
+    @Mock
+    private SysUserMapper sysUserMapper;
 
     @InjectMocks
     private ActivityService activityService;
@@ -800,6 +814,114 @@ class ActivityServiceTest {
 
                 verify(goodsService).deductStock(200L, merchantId, 50);
             }
+        }
+    }
+
+    // ========================================================================
+    // preheatActivity
+    // ========================================================================
+
+    @Nested
+    @DisplayName("preheatActivity")
+    class PreheatActivity {
+
+        private final Long activityId = 10L;
+
+        @Test
+        @DisplayName("快乐路径：SET stock/limit + DEL+SADD blacklist")
+        void happyPath() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(redisTemplate.opsForSet()).thenReturn(setOps);
+
+            SeckillGoods sg = new SeckillGoods();
+            sg.setSeckillGoodsId(100L);
+            sg.setStock(50);
+            sg.setLimitNum(1);
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg));
+
+            SysUser banned = new SysUser();
+            banned.setUserId(999L);
+            when(sysUserMapper.selectList(any())).thenReturn(List.of(banned));
+
+            activityService.preheatActivity(activityId);
+
+            // 库存预热
+            verify(valueOps).set("seckill:stock:" + activityId + ":100", "50");
+            verify(valueOps).set("seckill:limit:" + activityId + ":100", "1");
+            // 黑名单预热
+            verify(redisTemplate).delete("seckill:blacklist");
+            verify(setOps).add("seckill:blacklist", "999");
+        }
+
+        @Test
+        @DisplayName("无秒杀商品 → 不写 stock key，只做黑名单预热")
+        void emptyGoods() {
+            when(redisTemplate.opsForSet()).thenReturn(setOps);
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of());
+
+            SysUser banned = new SysUser();
+            banned.setUserId(999L);
+            when(sysUserMapper.selectList(any())).thenReturn(List.of(banned));
+
+            activityService.preheatActivity(activityId);
+
+            verify(valueOps, never()).set(anyString(), anyString());
+            verify(redisTemplate).delete("seckill:blacklist");
+            verify(setOps).add("seckill:blacklist", "999");
+        }
+    }
+
+    // ========================================================================
+    // startActivity
+    // ========================================================================
+
+    @Nested
+    @DisplayName("startActivity")
+    class StartActivity {
+
+        private final Long activityId = 10L;
+
+        private Activity preheatingActivity() {
+            Activity a = new Activity();
+            a.setActivityId(activityId);
+            a.setStatus(ActivityStatus.preheating);
+            a.setStartTime(LocalDateTime.now().plusMinutes(5));
+            return a;
+        }
+
+        @Test
+        @DisplayName("快乐路径：preheating → running")
+        void happyPath() {
+            Activity activity = preheatingActivity();
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+            when(activityMapper.update(any(Activity.class), any())).thenReturn(1);
+
+            activityService.startActivity(activityId);
+
+            assertThat(activity.getStatus()).isEqualTo(ActivityStatus.running);
+            verify(activityMapper).update(eq(activity), any());
+        }
+
+        @Test
+        @DisplayName("已是 running → 幂等跳过")
+        void alreadyRunning() {
+            Activity activity = preheatingActivity();
+            activity.setStatus(ActivityStatus.running);
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+
+            activityService.startActivity(activityId);
+
+            verify(activityMapper, never()).update(any(), any());
+        }
+
+        @Test
+        @DisplayName("活动不存在 → 幂等跳过")
+        void activityNotFound() {
+            when(activityMapper.selectById(activityId)).thenReturn(null);
+
+            activityService.startActivity(activityId);
+
+            verify(activityMapper, never()).update(any(), any());
         }
     }
 

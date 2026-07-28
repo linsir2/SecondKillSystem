@@ -55,4 +55,16 @@ public class Activity {
         }
         this.status = ActivityStatus.preheating;
     }
+
+    /**
+     * preheating → running（活动开始）。
+     *
+     * @throws IllegalStateException 当前状态不是 preheating
+     */
+    public void start() {
+        if (this.status != ActivityStatus.preheating) {
+            throw new IllegalStateException("当前状态不可开始");
+        }
+        this.status = ActivityStatus.running;
+    }
 }
