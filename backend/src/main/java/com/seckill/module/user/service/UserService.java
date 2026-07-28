@@ -29,4 +29,22 @@ public interface UserService {
      * @throws IllegalArgumentException userIds 为 {@code null}
      */
     List<UserInfo> getUserInfoList(List<Long> userIds);
+
+    /**
+     * 封禁用户（仅管理员）。
+     *
+     * @param operatorId 操作者 ID（必须是 admin）
+     * @param userId     目标用户 ID
+     * @throws BusinessException 无权操作/用户不存在/已封禁
+     */
+    void banUser(Long operatorId, Long userId);
+
+    /**
+     * 解封用户（仅管理员）。
+     *
+     * @param operatorId 操作者 ID（必须是 admin）
+     * @param userId     目标用户 ID
+     * @throws BusinessException 无权操作/用户不存在/未封禁
+     */
+    void unbanUser(Long operatorId, Long userId);
 }

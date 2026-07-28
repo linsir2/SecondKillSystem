@@ -130,7 +130,11 @@ public class GoodsServiceImpl implements GoodsService {
         Goods goods = findOwnedGoods(merchantId, goodsId);
         if (goods.getStatus() == 1) return toGoodsVO(goods); // 幂等
 
-        goods.setStatus(1);
+        try {
+            goods.putOnSale();
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
         goodsMapper.updateById(goods);
         return toGoodsVO(goods);
     }
@@ -140,7 +144,11 @@ public class GoodsServiceImpl implements GoodsService {
         Goods goods = findOwnedGoods(merchantId, goodsId);
         if (goods.getStatus() == 0) return toGoodsVO(goods); // 幂等
 
-        goods.setStatus(0);
+        try {
+            goods.takeOffShelf();
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
         goodsMapper.updateById(goods);
         return toGoodsVO(goods);
     }

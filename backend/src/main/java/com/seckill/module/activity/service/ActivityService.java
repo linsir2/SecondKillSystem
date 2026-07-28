@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
+import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
+import com.seckill.module.activity.model.dto.ActivitySubmittedForReviewEvent;
 import com.seckill.module.activity.model.dto.CreateActivityRequest;
 import com.seckill.module.activity.model.dto.CreateSeckillGoodsItem;
 import com.seckill.module.activity.model.entity.Activity;
@@ -15,6 +17,7 @@ import com.seckill.module.activity.model.vo.SeckillGoodsVO;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +42,7 @@ public class ActivityService {
     private final ActivityMapper activityMapper;
     private final SeckillGoodsMapper seckillGoodsMapper;
     private final GoodsService goodsService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ========================================================================
     // 创建草稿
@@ -193,9 +197,6 @@ public class ActivityService {
         if (!activity.getMerchantId().equals(merchantId)) {
             throw new BusinessException("无权操作该活动");
         }
-        if (activity.getStatus() != ActivityStatus.draft) {
-            throw new BusinessException("当前状态不可提交审核");
-        }
         if (!activity.getStartTime().isAfter(LocalDateTime.now())) {
             throw new IllegalArgumentException("活动开始时间已过期");
         }
@@ -239,8 +240,12 @@ public class ActivityService {
             throw new BusinessException("部分商品校验未通过", errors);
         }
 
-        // ---- 乐观锁更新状态 ----
-        activity.setStatus(ActivityStatus.pending);
+        // ---- 实体领域行为 + 乐观锁更新 ----
+        try {
+            activity.submitForReview();
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
         LambdaUpdateWrapper<Activity> wrapper = new LambdaUpdateWrapper<Activity>()
                 .eq(Activity::getActivityId, activityId)
                 .eq(Activity::getStatus, ActivityStatus.draft);
@@ -248,6 +253,9 @@ public class ActivityService {
         if (affected == 0) {
             throw new BusinessException("提交失败，请刷新重试");
         }
+
+        // ---- 领域事件 ----
+        eventPublisher.publishEvent(new ActivitySubmittedForReviewEvent(activityId, merchantId));
 
         // ---- 组装 VO ----
         List<SeckillGoodsVO> goodsVOs = buildSubmitGoodsVOs(seckillGoodsList, goodsInfos);
@@ -297,9 +305,6 @@ public class ActivityService {
         if (activity == null) {
             throw new BusinessException("活动不存在");
         }
-        if (activity.getStatus() != ActivityStatus.pending) {
-            throw new BusinessException("当前状态不可审核");
-        }
         if (!activity.getStartTime().isAfter(LocalDateTime.now())) {
             throw new IllegalArgumentException("活动开始时间已过期");
         }
@@ -335,13 +340,17 @@ public class ActivityService {
             throw new BusinessException("部分商品校验未通过", errors);
         }
 
-        // ---- 预占库存 ----
-        for (SeckillGoods sg : seckillGoodsList) {
-            goodsService.deductStock(sg.getGoodsId(), activity.getMerchantId(), sg.getStock());
+        // ---- 实体领域行为（先校验，再预占库存） ----
+        try {
+            activity.approve();
+            for (SeckillGoods sg : seckillGoodsList) {
+                goodsService.deductStock(sg.getGoodsId(), activity.getMerchantId(), sg.getStock());
+            }
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
         }
 
-        // ---- 乐观锁更新状态 ----
-        activity.setStatus(ActivityStatus.preheating);
+        // ---- 乐观锁更新 ----
         LambdaUpdateWrapper<Activity> wrapper = new LambdaUpdateWrapper<Activity>()
                 .eq(Activity::getActivityId, activityId)
                 .eq(Activity::getStatus, ActivityStatus.pending);
@@ -349,6 +358,9 @@ public class ActivityService {
         if (affected == 0) {
             throw new BusinessException("审核失败，请刷新重试");
         }
+
+        // ---- 领域事件 ----
+        eventPublisher.publishEvent(new ActivityApprovedEvent(activityId, activity.getMerchantId()));
 
         // ---- 组装 VO ----
         List<SeckillGoodsVO> goodsVOs = buildSubmitGoodsVOs(seckillGoodsList, goodsInfos);

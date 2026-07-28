@@ -3,6 +3,8 @@ package com.seckill.module.activity.service;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
+import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
+import com.seckill.module.activity.model.dto.ActivitySubmittedForReviewEvent;
 import com.seckill.module.activity.model.dto.CreateActivityRequest;
 import com.seckill.module.activity.model.dto.CreateSeckillGoodsItem;
 import com.seckill.module.activity.model.entity.Activity;
@@ -11,6 +13,7 @@ import com.seckill.module.activity.model.enums.ActivityStatus;
 import com.seckill.module.activity.model.vo.ActivityVO;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -49,6 +52,8 @@ class ActivityServiceTest {
     private SeckillGoodsMapper seckillGoodsMapper;
     @Mock
     private GoodsService goodsService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ActivityService activityService;
@@ -371,6 +376,8 @@ class ActivityServiceTest {
                 assertThat(vo.getSeckillGoodsList()).hasSize(1);
                 assertThat(vo.getSeckillGoodsList().get(0).getGoodsName()).isEqualTo("测试商品");
                 assertThat(vo.getActivityName()).isEqualTo("国庆秒杀");
+
+                verify(eventPublisher).publishEvent(any(ActivitySubmittedForReviewEvent.class));
             }
 
             @Test
@@ -396,6 +403,8 @@ class ActivityServiceTest {
                 assertThat(vo.getSeckillGoodsList()).hasSize(2);
                 assertThat(vo.getSeckillGoodsList().get(0).getGoodsName()).isEqualTo("商品A");
                 assertThat(vo.getSeckillGoodsList().get(1).getGoodsName()).isEqualTo("商品B");
+
+                verify(eventPublisher).publishEvent(any(ActivitySubmittedForReviewEvent.class));
             }
         }
 
@@ -432,6 +441,16 @@ class ActivityServiceTest {
                 Activity activity = draftActivity();
                 activity.setStatus(status);
                 when(activityMapper.selectById(activityId)).thenReturn(activity);
+                // 实体方法在 goods 校验之后执行，需要 mock 让商品校验通过
+                SeckillGoods sg = new SeckillGoods();
+                sg.setSeckillGoodsId(100L);
+                sg.setGoodsId(200L);
+                sg.setSeckillPrice(new BigDecimal("9.90"));
+                sg.setStock(50);
+                sg.setLimitNum(1);
+                when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg));
+                when(goodsService.getGoodsInfoList(anyList(), anyLong())).thenReturn(
+                        List.of(new GoodsInfo(200L, "测试商品", new BigDecimal("99.00"), 100)));
 
                 assertThatThrownBy(() -> activityService.submitForReview(merchantId, activityId))
                         .isInstanceOf(BusinessException.class)
@@ -605,6 +624,7 @@ class ActivityServiceTest {
                 assertThat(vo.getActivityName()).isEqualTo("国庆秒杀");
 
                 verify(goodsService).deductStock(200L, merchantId, 50);
+                verify(eventPublisher).publishEvent(any(ActivityApprovedEvent.class));
             }
 
             @Test
@@ -633,6 +653,7 @@ class ActivityServiceTest {
 
                 verify(goodsService).deductStock(200L, merchantId, 50);
                 verify(goodsService).deductStock(201L, merchantId, 30);
+                verify(eventPublisher).publishEvent(any(ActivityApprovedEvent.class));
             }
         }
 
@@ -657,6 +678,16 @@ class ActivityServiceTest {
                 Activity activity = pendingActivity();
                 activity.setStatus(status);
                 when(activityMapper.selectById(activityId)).thenReturn(activity);
+                // 实体方法在 goods 校验 + 扣库存之后执行，需要 mock 让前置步骤通过
+                SeckillGoods sg = new SeckillGoods();
+                sg.setSeckillGoodsId(100L);
+                sg.setGoodsId(200L);
+                sg.setSeckillPrice(new BigDecimal("9.90"));
+                sg.setStock(50);
+                sg.setLimitNum(1);
+                when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg));
+                when(goodsService.getGoodsInfoList(anyList(), anyLong())).thenReturn(
+                        List.of(new GoodsInfo(200L, "测试商品", new BigDecimal("99.00"), 100)));
 
                 assertThatThrownBy(() -> activityService.approveActivity(activityId))
                         .isInstanceOf(BusinessException.class)

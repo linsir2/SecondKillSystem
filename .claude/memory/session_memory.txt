@@ -17,3 +17,16 @@
     - ActivityService.approveActivity（前置校验 → 商品存在性+库存 → deductStock 预占 → 乐观锁 status→preheating）
     - ActivityController POST /{activityId}/approve（admin 权限 + 异常传播）
     - 新测试 9（DeductStock）+ 12（ApproveActivity）+ 7（Controller）= 29 个，175/175 全绿
+
+[UPDATE] 2026-07-28 管理员上下文 + 代码审查修复：
+1. 封禁用户：SysUser.ban()/unban() 领域方法、UserService banUser/unbanUser（Redis SADD/SREM + 事件驱动通知）
+2. 审核通知：商家提交审核 → 查所有 admin → 发 approval_result 通知
+3. WebSocket 广播：/ws/notification 端点，审核通过后广播活动预告
+4. 代码审查修复 6 项：
+   - WebSocket JSON 手动拼接 → ObjectMapper 序列化
+   - 并发封禁 Redis SETNX 分布式锁
+   - 被封禁 admin 无权操作 ban/unban
+   - WebSocket 测试补 closed session / 空集 / 重复连接（+3）
+   - ban/unban 测试补 operatorNotFound（+2）
+   - onActivitySubmittedForReview/onUserBanned 补 @Retryable + @Recover
+5. 新增 10 测试全绿（293 总，0 Failures，42 Docker 预存 Error）
