@@ -32,10 +32,6 @@ import static org.junit.jupiter.api.Assertions.*;
     properties = {
         // 本测试只依赖 Redis，排除 MySQL / Flyway / MyBatis-Plus / RocketMQ 自动装配
         "spring.autoconfigure.exclude="
-            + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
-            + "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration,"
-            + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,"
-            + "com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration,"
             + "org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration",
         "spring.data.redis.host=localhost",
         "spring.data.redis.port=6379"

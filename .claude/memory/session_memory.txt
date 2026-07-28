@@ -1,0 +1,19 @@
+[UPDATE] 2026-07-27 完成：
+1. SeckillStockService TDD：Lua 库存扣减（8 测试全绿）
+2. GatewayCheckService TDD：黑名单 + 1s 限流（19 测试全绿）
+3. BlacklistLoader TDD：启动时 DB→Redis 加载封禁用户（6 测试全绿）
+4. 修复 MySQL 连不上 → WSL2 本地 MySQL 8.0 占用了 3306 端口（sudo service mysql stop）
+5. User context TDD：SysUser entity、UserInfo DTO、SysUserMapper、UserRole/BanStatus enum、UserService OHS 接口、UserServiceImpl（Map 保序 + null 安全 role/banStatus 转换）（13 测试全绿）
+6. AuthFilter TDD：X-User-Id header → SecurityContext，NumberFormatException 防护 + finally 清理（10 测试全绿）
+7. ActivityController TDD：submitForReview（draft→pending），securityContext 鉴权 + role 校验 + Result 响应（10 测试全绿）
+8. 公共层：Result 统一响应、GlobalExceptionHandler、CurrentUser/SecurityContext 线程级认证上下文
+9. submitForReview 完整链路贯通：X-User-Id → AuthFilter → SecurityContext → ActivityController → ActivityService → DB
+10. GoodsServiceImpl TDD：商品 CRUD + 上下架 + OHS 批量查询，42 测试覆盖字段校验/归属/幂等/保序/merchant 过滤（42 全绿）
+11. 修复存量 33 个 Spring 启动错误：实现 GoodsServiceImpl 解决 ActivityService 依赖断裂；移除 GatewayCheckServiceTest/SeckillStockServiceTest 中过时的 MyBatis 自动配置排除（147/147 全绿）
+12. 跨模块数据契约审查：发现 ActivityService submitForReview 中 `sg.getStock() > info.getStock()` 在 info.getStock 为 null 时 NPE；补了 `!= null` 守卫
+13. Activity.status String → ActivityStatus enum（DB ENUM 匹配），SysUser.role/banStatus String → UserRole/BanStatus enum；type-enums-package 配置补全；contract-first 前置枚举文档 → 改测试 → 改业务代码，147/147 全绿
+14. 管理员审核流 TDD（pending → preheating）：契约先行 → RED → GREEN
+    - GoodsService.deductStock（原子 SQL 扣减 + merchant 归属校验 + 库存充足校验）
+    - ActivityService.approveActivity（前置校验 → 商品存在性+库存 → deductStock 预占 → 乐观锁 status→preheating）
+    - ActivityController POST /{activityId}/approve（admin 权限 + 异常传播）
+    - 新测试 9（DeductStock）+ 12（ApproveActivity）+ 7（Controller）= 29 个，175/175 全绿

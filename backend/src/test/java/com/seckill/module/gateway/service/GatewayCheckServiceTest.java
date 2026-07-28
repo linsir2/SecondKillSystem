@@ -28,10 +28,6 @@ import static org.junit.jupiter.api.Assertions.*;
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
     properties = {
         "spring.autoconfigure.exclude="
-            + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
-            + "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration,"
-            + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,"
-            + "com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration,"
             + "org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration",
         "spring.data.redis.host=localhost",
         "spring.data.redis.port=6379"
