@@ -38,6 +38,7 @@ class GatewayCheckFilterTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContext.clear(); // 避免被其他测试的 ThreadLocal 泄漏污染
         filter = new GatewayCheckFilter(gatewayCheckService, objectMapper);
         request = new MockHttpServletRequest("POST", "/api/v1/seckill/execute");
         response = new MockHttpServletResponse();

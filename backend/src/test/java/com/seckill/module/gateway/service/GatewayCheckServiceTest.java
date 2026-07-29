@@ -141,13 +141,13 @@ class GatewayCheckServiceTest {
 
     @Test
     @DisplayName("9. 等待 1 秒后（key 过期）→ 再次 PASS")
-    void shouldPassAfterRateLimitExpires() {
+    void shouldAllowPassAfterRateLimitExpiresNaturally() {
         gatewayCheckService.check(USER_A);
         assertEquals(GatewayCheckResult.CODE_RATE_LIMITED,
                 gatewayCheckService.check(USER_A).code());
 
-        // 等待 TTL 过期
-        sleepQuietly(1100);
+        // 等待 TTL 过期（+200ms 缓冲应对调度延迟）
+        sleepQuietly(1200);
 
         assertEquals(GatewayCheckResult.CODE_PASS,
                 gatewayCheckService.check(USER_A).code());
@@ -292,7 +292,7 @@ class GatewayCheckServiceTest {
 
     @Test
     @DisplayName("19. 限流 key 自然到期后多次恢复验证（与 9 互补，间隔调用不再是同 1s）")
-    void shouldAllowPassAfterRateLimitExpiresNaturally() {
+    void shouldRecoverMultipleTimesAfterRateLimitExpires() {
         gatewayCheckService.check(USER_A);
         gatewayCheckService.check(USER_A);
         assertEquals(GatewayCheckResult.CODE_RATE_LIMITED,

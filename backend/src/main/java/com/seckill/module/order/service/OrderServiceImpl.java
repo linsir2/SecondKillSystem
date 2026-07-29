@@ -105,6 +105,7 @@ public class OrderServiceImpl implements OrderService {
     // ========================================================================
 
     @Override
+    @Transactional
     public void pay(Long orderNo, Long userId) {
         if (orderNo == null) throw new IllegalArgumentException("orderNo must not be null");
         if (userId == null) throw new IllegalArgumentException("userId must not be null");
@@ -141,7 +142,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // ---- 6. 领域事件 ----
-        eventPublisher.publishEvent(new OrderPaidEvent(orderNo, order.getOrderToken()));
+        eventPublisher.publishEvent(new OrderPaidEvent(orderNo, order.getOrderToken(), order.getActivityId()));
     }
 
     // ========================================================================

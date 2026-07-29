@@ -50,7 +50,7 @@ services:
     container_name: seckill-rmq-broker
     command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/rocketmq-5.3.1/conf/broker.conf
     environment:
-      JAVA_OPT_EXT: "-DbrokerIP1=127.0.0.1"
+      JAVA_OPT_EXT: "-DbrokerIP1=127.0.0.1 -Duser.home=/home/rocketmq"
     depends_on:
       rocketmq-namesrv:
         condition: service_started

@@ -1,6 +1,7 @@
 package com.seckill.integration;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.activity.model.entity.Activity;
@@ -77,6 +78,9 @@ class SeckillOrderMqIntegrationTest {
     @Autowired
     private GoodsMapper goodsMapper;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     /** 秒杀商品 ID，必须与 insertTestData 一致 */
     private static final Long ACTIVITY_ID = 7001L;
     private static final Long GOODS_ID = 9001L;
@@ -90,9 +94,23 @@ class SeckillOrderMqIntegrationTest {
         insertTestData();
 
         // 发一条预热消息等 consumer 注册完毕
+        // 重试至多 5 次，应对 RocketMQ 刚启动时 topic 路由未就绪
         String warmupToken = UUID.randomUUID().toString();
-        rocketMQTemplate.syncSend("seckill_order:stock_deducted",
-                new SeckillDeductedEvent(warmupToken, USER_ID, ACTIVITY_ID, SECKILL_GOODS_ID, 1));
+        SeckillDeductedEvent warmupEvent = new SeckillDeductedEvent(
+                warmupToken, USER_ID, ACTIVITY_ID, SECKILL_GOODS_ID, 1);
+
+        RuntimeException lastEx = null;
+        for (int i = 0; i < 5; i++) {
+            try {
+                rocketMQTemplate.syncSend("seckill_order:stock_deducted", warmupEvent);
+                lastEx = null;
+                break;
+            } catch (RuntimeException e) {
+                lastEx = e;
+                sleep(2000);
+            }
+        }
+        if (lastEx != null) throw lastEx;
 
         SeckillOrder order = pollByToken(warmupToken, WARMUP_POLL_MS);
         assertNotNull(order, "预热应成功，consumer 应在 " + WARMUP_POLL_MS + "ms 内就绪");
@@ -116,11 +134,17 @@ class SeckillOrderMqIntegrationTest {
     // ========================================================================
 
     private void cleanTables() {
-        orderMapper.delete(null);
-        messageLogMapper.delete(null);
-        seckillGoodsMapper.delete(null);
-        activityMapper.delete(null);
-        goodsMapper.delete(null);
+        orderMapper.delete(Wrappers.emptyWrapper());
+        messageLogMapper.delete(Wrappers.emptyWrapper());
+        seckillGoodsMapper.delete(Wrappers.emptyWrapper());
+        activityMapper.delete(Wrappers.emptyWrapper());
+        goodsMapper.delete(Wrappers.emptyWrapper());
+        // wrapper.delete 在某些 MyBatis-Plus 版本可能不生效，显式 TRUNCATE 兜底
+        jdbcTemplate.execute("DELETE FROM seckill_order");
+        jdbcTemplate.execute("DELETE FROM message_log");
+        jdbcTemplate.execute("DELETE FROM seckill_goods");
+        jdbcTemplate.execute("DELETE FROM activity");
+        jdbcTemplate.execute("DELETE FROM goods");
     }
 
     private void insertTestData() {

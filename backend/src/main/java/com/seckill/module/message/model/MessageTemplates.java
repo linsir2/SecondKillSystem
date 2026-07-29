@@ -84,4 +84,28 @@ public final class MessageTemplates {
         Objects.requireNonNull(email, "email must not be null");
         return "欢迎注册秒杀系统！您已使用邮箱 " + email + " 成功注册。祝您购物愉快！";
     }
+
+    /**
+     * 支付通知 → 商家（提醒发货）。
+     *
+     * @param orderNo 订单号（非 null）
+     * @param amount  支付金额字符串（非 null，如 "19.99"）
+     */
+    public static String paymentNotifyMerchant(Long orderNo, String amount) {
+        Objects.requireNonNull(orderNo, "orderNo must not be null");
+        Objects.requireNonNull(amount, "amount must not be null");
+        return "订单" + orderNo + "已支付（" + amount + "元），请及时发货";
+    }
+
+    /**
+     * 支付通知 → 买家（购买成功）。
+     *
+     * @param orderNo 订单号（非 null）
+     * @param amount  支付金额字符串（非 null，如 "19.99"）
+     */
+    public static String paymentNotifyUser(Long orderNo, String amount) {
+        Objects.requireNonNull(orderNo, "orderNo must not be null");
+        Objects.requireNonNull(amount, "amount must not be null");
+        return "您已成功支付订单" + orderNo + "（" + amount + "元），商品准备中";
+    }
 }

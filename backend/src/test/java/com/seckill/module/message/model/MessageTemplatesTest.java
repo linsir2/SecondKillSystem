@@ -81,4 +81,49 @@ class MessageTemplatesTest {
         assertThrows(NullPointerException.class,
                 () -> MessageTemplates.userWelcome(null));
     }
+
+    @Test
+    void paymentNotifyMerchant_happyPath() {
+        String result = MessageTemplates.paymentNotifyMerchant(10001L, "19.99");
+
+        assertThat(result).isEqualTo("订单10001已支付（19.99元），请及时发货");
+    }
+
+    @Test
+    void paymentNotifyMerchant_nullOrderNo_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.paymentNotifyMerchant(null, "19.99"));
+    }
+
+    @Test
+    void paymentNotifyMerchant_nullAmount_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.paymentNotifyMerchant(10001L, null));
+    }
+
+    @Test
+    void paymentNotifyMerchant_zeroAmount() {
+        String result = MessageTemplates.paymentNotifyMerchant(10001L, "0.00");
+
+        assertThat(result).contains("（0.00元）");
+    }
+
+    @Test
+    void paymentNotifyUser_happyPath() {
+        String result = MessageTemplates.paymentNotifyUser(10001L, "19.99");
+
+        assertThat(result).isEqualTo("您已成功支付订单10001（19.99元），商品准备中");
+    }
+
+    @Test
+    void paymentNotifyUser_nullOrderNo_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.paymentNotifyUser(null, "19.99"));
+    }
+
+    @Test
+    void paymentNotifyUser_nullAmount_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.paymentNotifyUser(10001L, null));
+    }
 }

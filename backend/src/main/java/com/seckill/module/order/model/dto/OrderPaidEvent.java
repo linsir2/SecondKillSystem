@@ -5,6 +5,7 @@ package com.seckill.module.order.model.dto;
  *
  * @param orderNo    订单号
  * @param orderToken 幂等键
+ * @param activityId 活动 ID（用于清理 pending ZSET）
  */
-public record OrderPaidEvent(Long orderNo, String orderToken) {
+public record OrderPaidEvent(Long orderNo, String orderToken, Long activityId) {
 }

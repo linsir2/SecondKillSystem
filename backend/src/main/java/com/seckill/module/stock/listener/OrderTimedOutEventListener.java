@@ -4,14 +4,15 @@ import com.seckill.module.order.model.dto.OrderTimedOutEvent;
 import com.seckill.module.stock.service.SeckillStockService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * 超时关单 Redis 补偿监听器 —— 监听 {@link OrderTimedOutEvent}，恢复 Redis 库存。
  *
- * <p>Redis 补偿是 best-effort 操作，异常仅 log 不传播，
- * 避免 MQ 消费者因此重试导致死循环。</p>
+ * <p>使用 {@link TransactionPhase#AFTER_COMMIT}，确保 DB 事务已提交再执行 Redis 补偿，
+ * 避免 DB 回滚导致 Redis 与 MySQL 不一致风险。</p>
  */
 @Component
 public class OrderTimedOutEventListener {
@@ -24,7 +25,7 @@ public class OrderTimedOutEventListener {
         this.seckillStockService = seckillStockService;
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleOrderTimedOut(OrderTimedOutEvent event) {
         try {
             seckillStockService.compensateByTimeout(

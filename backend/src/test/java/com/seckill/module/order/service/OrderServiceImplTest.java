@@ -428,7 +428,7 @@ class OrderServiceImplTest {
     }
 
     @Test
-    @DisplayName("P2 UNPAID -> PAID, payTime 设置, update 被调用, 发布 OrderPaidEvent")
+    @DisplayName("P2 UNPAID -> PAID, payTime 设置, update 被调用, 发布 OrderPaidEvent(含 activityId)")
     void paySuccess() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.UNPAID));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(1);
@@ -439,7 +439,12 @@ class OrderServiceImplTest {
         verify(orderMapper).update(captor.capture(), any());
         assertEquals(OrderStatus.PAID, captor.getValue().getStatus());
         assertNotNull(captor.getValue().getPayTime());
-        verify(eventPublisher).publishEvent(any(OrderPaidEvent.class));
+
+        var eventCaptor = ArgumentCaptor.forClass(OrderPaidEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertEquals(ACTIVITY_ID, eventCaptor.getValue().activityId());
+        assertEquals(ORDER_TOKEN, eventCaptor.getValue().orderToken());
+        assertEquals(ORDER_NO, eventCaptor.getValue().orderNo());
     }
 
     @Test
