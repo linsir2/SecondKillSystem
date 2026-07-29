@@ -30,3 +30,14 @@
    - ban/unban 测试补 operatorNotFound（+2）
    - onActivitySubmittedForReview/onUserBanned 补 @Retryable + @Recover
 5. 新增 10 测试全绿（293 总，0 Failures，42 Docker 预存 Error）
+
+[UPDATE] 2026-07-29 活动状态机 running→ended + 支付上下文：
+1. 修复 48 个 @SpringBootTest 启动失败：添加 spring-boot-starter-aop 依赖（aspectj ClassNotFoundException）
+2. 支付上下文 TDD：Controller → PaymentService → OrderService.pay() 乐观锁 → Payment 流水入库 → PaymentConfirmedEvent 发布（20 个纯 Mockito 测试）
+   - 核心设计：无第三方支付，前端点击即付；直接调 OrderService.pay() 而非事件解耦
+3. 活动状态机最后一块：running → ended + 4min 冷却后库存回补
+   - endActivity()：仅改状态，乐观锁幂等
+   - restoreActivityStock()：读 Redis 剩余库存 → restoreStock() 回补 goods.stock → 清理 Redis keys
+   - GoodsMapper.addStock() 原子 INCRBY（与 deductStock 对称）
+   - 三阶段 scheduler：预热/开始 / 到期结束 / 4min 后回补
+4. 测试：ActivityTest(6) + ActivityServiceTest endActivity(6) + ActivityServiceTest restoreActivityStock(12) + GoodsServiceTest restoreStock(5) + 原 389 = 419 全绿

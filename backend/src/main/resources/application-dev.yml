@@ -9,6 +9,9 @@ spring:
 rocketmq:
   name-server: localhost:9876
 
+jwt:
+  dev-auth-fallback: true
+
 logging:
   level:
     com.seckill: debug

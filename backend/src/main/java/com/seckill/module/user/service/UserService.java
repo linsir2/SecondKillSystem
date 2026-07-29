@@ -1,6 +1,6 @@
 package com.seckill.module.user.service;
 
-import com.seckill.module.user.model.dto.UserInfo;
+import com.seckill.module.user.model.dto.*;
 
 import java.util.List;
 
@@ -47,4 +47,44 @@ public interface UserService {
      * @throws BusinessException 无权操作/用户不存在/未封禁
      */
     void unbanUser(Long operatorId, Long userId);
+
+    // ========================================================================
+    // 认证（AuthController 使用）
+    // ========================================================================
+
+    /**
+     * 注册新用户。
+     *
+     * @param req 注册请求
+     * @return 注册事件
+     * @throws BusinessException 用户名/邮箱重复
+     */
+    UserRegisteredEvent register(RegisterRequest req);
+
+    /**
+     * 登录。
+     *
+     * @param req 登录请求
+     * @return JWT token 及用户信息
+     * @throws BusinessException 邮箱不存在/密码错误/已封禁
+     */
+    LoginVO login(LoginRequest req);
+
+    /**
+     * 刷新 access token。
+     *
+     * @param refreshToken refresh token
+     * @return 新的 token 对
+     * @throws BusinessException token 无效/用户不存在
+     */
+    LoginVO refresh(String refreshToken);
+
+    /**
+     * 获取当前用户信息（含封禁状态）。
+     *
+     * @param userId 用户 ID
+     * @return 用户信息
+     * @throws BusinessException 用户不存在
+     */
+    UserInfoVO getCurrentUser(Long userId);
 }

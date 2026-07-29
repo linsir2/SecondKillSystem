@@ -182,6 +182,7 @@ seckill:pending:{activityId}                   排队凭证 zset（score=时间�
 - 测试不用 Spring 上下文就尽量不用——纯 Jedis/纯 JUnit 跑得快
 - Redis 相关测试直连 docker-compose Redis（`localhost:6379`），`@BeforeEach FLUSHALL` 保证隔离
 - Testcontainers 暂不可用（docker-java ↔ Docker Engine 29.4.0 不兼容），待升级后切回
+- 不能为了让测试 GREEN ，而随便更改测试代码，要确定到底是测试的问题还是业务代码的问题
 
 **Lua 脚本 TDD 特例：**
 - Lua 脚本从 classpath 加载（`src/main/resources/lua/`）

@@ -65,8 +65,7 @@ class MessageLogScannerTest {
     /** 从 verify 捕获 syncSend 的 destination。 */
     private ArgumentCaptor<String> captureDest() {
         var c = ArgumentCaptor.forClass(String.class);
-        var msg = ArgumentCaptor.forClass(OrderTimeoutMessage.class);
-        verify(rocketMQTemplate).syncSend(c.capture(), msg.capture(), anyLong());
+        verify(rocketMQTemplate).syncSend(c.capture(), any(), anyLong(), anyInt());
         return c;
     }
 
@@ -88,7 +87,7 @@ class MessageLogScannerTest {
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate, never()).syncSend(anyString(), any(Object.class), anyLong());
+        verify(rocketMQTemplate, never()).syncSend(anyString(), any(), anyLong(), anyInt());
         verify(messageLogMapper, never()).updateById(any(MessageLog.class));
     }
 
@@ -99,7 +98,7 @@ class MessageLogScannerTest {
         when(messageLogMapper.selectList(any())).thenReturn(List.of(msgLog));
 
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult);
 
         scanner.scanAndSend();
@@ -119,12 +118,12 @@ class MessageLogScannerTest {
         when(messageLogMapper.selectList(any())).thenReturn(logs);
 
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult);
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate, times(3)).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate, times(3)).syncSend(anyString(), any(), anyLong(), anyInt());
         var updates = captureUpdates(3).getAllValues();
         updates.forEach(u -> assertEquals(SendStatus.SENT, u.getStatus()));
     }
@@ -139,14 +138,14 @@ class MessageLogScannerTest {
 
         var sendResult = mock(SendResult.class);
         when(rocketMQTemplate.syncSend(eq("seckill_order:order_timeout"),
-                any(OrderTimeoutMessage.class), anyLong()))
+                any(), anyLong(), anyInt()))
                 .thenReturn(sendResult)
                 .thenThrow(new RuntimeException("Broker not available"))
                 .thenReturn(sendResult);
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate, times(3)).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate, times(3)).syncSend(anyString(), any(), anyLong(), anyInt());
         var updates = captureUpdates(3).getAllValues();
 
         // log1 → SENT
@@ -167,7 +166,7 @@ class MessageLogScannerTest {
     void mqBrokerDown() {
         var msgLog = log(1, SendStatus.INIT, 0);
         when(messageLogMapper.selectList(any())).thenReturn(List.of(msgLog));
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenThrow(new RuntimeException("Remoting connect fail"));
 
         scanner.scanAndSend();
@@ -182,7 +181,7 @@ class MessageLogScannerTest {
     void retryExhausted() {
         var msgLog = log(1, SendStatus.INIT, 2);
         when(messageLogMapper.selectList(any())).thenReturn(List.of(msgLog));
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenThrow(new RuntimeException("Broker down"));
 
         scanner.scanAndSend();
@@ -198,7 +197,7 @@ class MessageLogScannerTest {
         var msgLog = log(1, SendStatus.INIT, 0);
         when(messageLogMapper.selectList(any())).thenReturn(List.of(msgLog));
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult);
         // 1st call (SENT update) 抛异常 → catch 块调 2nd (retry update) 不再抛
         doThrow(new RuntimeException("DB update fail"))
@@ -207,7 +206,7 @@ class MessageLogScannerTest {
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate).syncSend(anyString(), any(), anyLong(), anyInt());
         verify(messageLogMapper, times(2)).updateById(any(MessageLog.class));
     }
 
@@ -218,7 +217,7 @@ class MessageLogScannerTest {
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate, never()).syncSend(anyString(), any(Object.class), anyLong());
+        verify(rocketMQTemplate, never()).syncSend(anyString(), any(), anyLong(), anyInt());
         verify(messageLogMapper, never()).updateById(any(MessageLog.class));
     }
 
@@ -241,13 +240,13 @@ class MessageLogScannerTest {
         when(messageLogMapper.selectList(any())).thenReturn(List.of(bad, good));
 
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult);
 
         scanner.scanAndSend();
 
         // 坏消息跳过，只有 good 下发
-        verify(rocketMQTemplate, times(1)).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate, times(1)).syncSend(anyString(), any(), anyLong(), anyInt());
     }
 
     // ================================================================
@@ -263,12 +262,12 @@ class MessageLogScannerTest {
         when(messageLogMapper.selectList(any())).thenReturn(List.of(init0, init2));
 
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult, sendResult);
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate, times(2)).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate, times(2)).syncSend(anyString(), any(), anyLong(), anyInt());
     }
 
     // ================================================================
@@ -281,14 +280,14 @@ class MessageLogScannerTest {
         var msgLog = log(1, SendStatus.INIT, 2);
         when(messageLogMapper.selectList(any())).thenReturn(List.of(msgLog));
         var sendResult = mock(SendResult.class);
-        when(rocketMQTemplate.syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong()))
+        when(rocketMQTemplate.syncSend(anyString(), any(), anyLong(), anyInt()))
                 .thenReturn(sendResult);
         doThrow(new RuntimeException("DB error"))
                 .when(messageLogMapper).updateById(any(MessageLog.class));
 
         scanner.scanAndSend();
 
-        verify(rocketMQTemplate).syncSend(anyString(), any(OrderTimeoutMessage.class), anyLong());
+        verify(rocketMQTemplate).syncSend(anyString(), any(), anyLong(), anyInt());
         verify(messageLogMapper, atLeastOnce()).updateById(any(MessageLog.class));
     }
 }

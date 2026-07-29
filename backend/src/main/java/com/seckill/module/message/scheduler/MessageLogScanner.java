@@ -9,6 +9,8 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -73,10 +75,13 @@ public class MessageLogScanner {
 
             OrderTimeoutMessage msg = objectMapper.readValue(logEntry.getBody(), OrderTimeoutMessage.class);
 
+            // delayLevel=5 对应 RocketMQ 默认 1 分钟延时（1s 5s 10s 30s 1m 2m 3m ...）
+            Message<OrderTimeoutMessage> rocketMsg = MessageBuilder.withPayload(msg).build();
             rocketMQTemplate.syncSend(
                     logEntry.getTopic() + ":" + logEntry.getTag(),
-                    msg,
-                    MQ_TIMEOUT_MS);
+                    rocketMsg,
+                    MQ_TIMEOUT_MS,
+                    5);
 
             // 成功
             MessageLog update = new MessageLog();

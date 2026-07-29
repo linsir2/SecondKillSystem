@@ -3,11 +3,12 @@ package com.seckill.module.user.service;
 import com.seckill.common.constant.BanStatus;
 import com.seckill.common.constant.UserRole;
 import com.seckill.common.exception.BusinessException;
+import com.seckill.common.security.JwtUtil;
 import com.seckill.module.user.mapper.SysUserMapper;
-import com.seckill.module.user.model.dto.UserBannedEvent;
-import com.seckill.module.user.model.dto.UserInfo;
-import com.seckill.module.user.model.dto.UserUnbannedEvent;
+import com.seckill.module.user.model.dto.*;
 import com.seckill.module.user.model.entity.SysUser;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 
@@ -28,11 +30,8 @@ import java.util.List;
 import static java.util.Collections.emptyList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -47,6 +46,10 @@ class UserServiceTest {
     private SetOperations<String, String> setOps;
     @Mock
     private ValueOperations<String, String> valueOps;
+    @Mock
+    private PasswordEncoder passwordEncoder;
+    @Mock
+    private JwtUtil jwtUtil;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -411,6 +414,219 @@ class UserServiceTest {
                     .hasMessageContaining("操作过于频繁");
 
             verify(eventPublisher, never()).publishEvent(any());
+        }
+    }
+
+    // ========================================================================
+    // register
+    // ========================================================================
+
+    @Nested
+    class Register {
+
+        private final RegisterRequest req = new RegisterRequest("新用户", "new@test.com", "password123", UserRole.user);
+
+        @Test
+        void happyPath_user() {
+            when(userMapper.selectCount(any())).thenReturn(0L);
+            when(passwordEncoder.encode("password123")).thenReturn("encoded_pwd");
+            // insert 时模拟 MyBatis-Plus 回写 userId
+            doAnswer(inv -> {
+                SysUser u = inv.getArgument(0);
+                u.setUserId(10001L);
+                return 1;
+            }).when(userMapper).insert(any(SysUser.class));
+
+            UserRegisteredEvent event = userService.register(req);
+
+            assertThat(event.email()).isEqualTo("new@test.com");
+            assertThat(event.role()).isEqualTo(UserRole.user);
+            assertThat(event.userId()).isNotNull();
+
+            verify(userMapper).insert(any(SysUser.class));
+            verify(eventPublisher).publishEvent(event);
+        }
+
+        @Test
+        void happyPath_merchant() {
+            RegisterRequest merchantReq = new RegisterRequest("商家A", "merchant@test.com", "password123", UserRole.merchant);
+            when(userMapper.selectCount(any())).thenReturn(0L);
+            when(passwordEncoder.encode(anyString())).thenReturn("encoded_pwd");
+
+            UserRegisteredEvent event = userService.register(merchantReq);
+
+            assertThat(event.role()).isEqualTo(UserRole.merchant);
+        }
+
+        @Test
+        void duplicateUserName_throws() {
+            when(userMapper.selectCount(any())).thenReturn(1L);
+
+            assertThatThrownBy(() -> userService.register(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("用户名已被注册");
+        }
+
+        @Test
+        void duplicateEmail_throws() {
+            when(userMapper.selectCount(any())).thenReturn(0L).thenReturn(1L);
+
+            assertThatThrownBy(() -> userService.register(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("邮箱已被注册");
+        }
+
+        @Test
+        void roleDefaultsToUser() {
+            RegisterRequest reqNoRole = new RegisterRequest("无名", "no@test.com", "password123", null);
+            when(userMapper.selectCount(any())).thenReturn(0L);
+            when(passwordEncoder.encode(anyString())).thenReturn("encoded");
+
+            UserRegisteredEvent event = userService.register(reqNoRole);
+
+            assertThat(event.role()).isEqualTo(UserRole.user);
+        }
+    }
+
+    // ========================================================================
+    // login
+    // ========================================================================
+
+    @Nested
+    class Login {
+
+        private final LoginRequest req = new LoginRequest("user@test.com", "correct_pwd");
+
+        private SysUser mockUser() {
+            SysUser u = new SysUser();
+            u.setUserId(1L);
+            u.setUserName("张三");
+            u.setEmail("user@test.com");
+            u.setPassword("encoded_pwd");
+            u.setRole(UserRole.user);
+            u.setBanStatus(BanStatus.normal);
+            return u;
+        }
+
+        @Test
+        void happyPath() {
+            SysUser user = mockUser();
+            when(userMapper.selectOne(any())).thenReturn(user);
+            when(passwordEncoder.matches("correct_pwd", "encoded_pwd")).thenReturn(true);
+            when(jwtUtil.generateAccessToken(1L, "张三", UserRole.user)).thenReturn("access");
+            when(jwtUtil.generateRefreshToken(1L)).thenReturn("refresh");
+
+            LoginVO vo = userService.login(req);
+
+            assertThat(vo.accessToken()).isEqualTo("access");
+            assertThat(vo.refreshToken()).isEqualTo("refresh");
+            assertThat(vo.userId()).isEqualTo(1L);
+            assertThat(vo.userName()).isEqualTo("张三");
+            assertThat(vo.role()).isEqualTo(UserRole.user);
+        }
+
+        @Test
+        void emailNotFound_throws() {
+            when(userMapper.selectOne(any())).thenReturn(null);
+
+            assertThatThrownBy(() -> userService.login(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("邮箱未注册");
+        }
+
+        @Test
+        void wrongPassword_throws() {
+            when(userMapper.selectOne(any())).thenReturn(mockUser());
+            when(passwordEncoder.matches("correct_pwd", "encoded_pwd")).thenReturn(false);
+
+            assertThatThrownBy(() -> userService.login(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("密码错误");
+        }
+
+        @Test
+        void bannedUser_throws() {
+            SysUser user = mockUser();
+            user.setBanStatus(BanStatus.banned);
+            when(userMapper.selectOne(any())).thenReturn(user);
+            when(passwordEncoder.matches("correct_pwd", "encoded_pwd")).thenReturn(true);
+
+            assertThatThrownBy(() -> userService.login(req))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("已被封禁");
+        }
+    }
+
+    // ========================================================================
+    // refresh
+    // ========================================================================
+
+    @Nested
+    class Refresh {
+
+        @Test
+        void happyPath() {
+            Claims claims = mock(Claims.class);
+            when(jwtUtil.validateRefreshToken("valid_token")).thenReturn(claims);
+            when(jwtUtil.getUserId(claims)).thenReturn(1L);
+            when(jwtUtil.generateAccessToken(1L, "张三", UserRole.user)).thenReturn("new_access");
+            when(jwtUtil.generateRefreshToken(1L)).thenReturn("new_refresh");
+            when(userMapper.selectById(1L)).thenReturn(createUser(1L, "张三", UserRole.user, BanStatus.normal));
+
+            LoginVO vo = userService.refresh("valid_token");
+
+            assertThat(vo.accessToken()).isEqualTo("new_access");
+            assertThat(vo.refreshToken()).isEqualTo("new_refresh");
+        }
+
+        @Test
+        void invalidToken_throws() {
+            when(jwtUtil.validateRefreshToken("bad_token")).thenThrow(new JwtException("invalid"));
+
+            assertThatThrownBy(() -> userService.refresh("bad_token"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("登录已过期");
+        }
+
+        @Test
+        void userNotFound_throws() {
+            Claims claims = mock(Claims.class);
+            when(jwtUtil.validateRefreshToken("token")).thenReturn(claims);
+            when(jwtUtil.getUserId(claims)).thenReturn(999L);
+            when(userMapper.selectById(999L)).thenReturn(null);
+
+            assertThatThrownBy(() -> userService.refresh("token"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("用户不存在");
+        }
+    }
+
+    // ========================================================================
+    // getCurrentUser
+    // ========================================================================
+
+    @Nested
+    class GetCurrentUser {
+
+        @Test
+        void happyPath() {
+            when(userMapper.selectById(1L)).thenReturn(createUser(1L, "张三", UserRole.user, BanStatus.normal));
+
+            UserInfoVO vo = userService.getCurrentUser(1L);
+
+            assertThat(vo.userId()).isEqualTo(1L);
+            assertThat(vo.userName()).isEqualTo("张三");
+            assertThat(vo.email()).isEqualTo("张三@test.com");
+            assertThat(vo.role()).isEqualTo(UserRole.user);
+            assertThat(vo.banStatus()).isEqualTo(BanStatus.normal);
+        }
+
+        @Test
+        void notFound_throws() {
+            when(userMapper.selectById(999L)).thenReturn(null);
+
+            assertThatThrownBy(() -> userService.getCurrentUser(999L))
+                    .isInstanceOf(BusinessException.class);
         }
     }
 }
