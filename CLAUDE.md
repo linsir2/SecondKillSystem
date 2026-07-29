@@ -70,7 +70,7 @@ DDD 领域分析见 `.claude/docs/ddd.md`，开发注意事项见 `.claude/docs/
 │   │       ├── goods/                #  普通商品
 │   │       ├── activity/             #  秒杀活动（状态机、审核）
 │   │       ├── order/                #  订单（状态机、支付）
-│   │       ├── stock/                #  库存（预留）
+│   │       ├── stock/                #  库存（Redis+Lua 预扣、补偿、兜底扫描）
 │   │       └── message/              #  消息中心（点对点+WebSocket）
 │   ├── src/main/resources/
 │   │   ├── application.yml           #  基础配置 + 占位符
@@ -134,6 +134,7 @@ SchedulerX 兜底悬空死账：ZRANGEBYSCORE 按窗口扫描 → 比对 MySQL �
 - **seckill_goods** — 秒杀商品，unique(activity_id, goods_id)，seckill_price, limit_num
 - **activity** — 秒杀活动，status ENUM(draft, pending, preheating, running, ended)
 - **seckill_order** — 订单，UK(order_token)，UK(user_id, activity_id, seckill_goods_id)
+- **payment** — 支付流水，UK(order_no)，status ENUM(SUCCESS, REFUND)，与订单解耦
 - **user_message** — 点对点私信，msg_type ENUM(approval_result, ban_info, sent_error)
 - **message_log** — 本地消息表（事务性 outbox），UNIQUE(biz_type, biz_id)
 

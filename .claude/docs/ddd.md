@@ -1,6 +1,6 @@
 # DDD 领域驱动设计分析
 
-> 基于 prd.md + sql.md + 注意事项.md，v1 版本。
+> 基于 prd.md + sql.md + 注意事项.md。
 
 ---
 
@@ -173,8 +173,8 @@
 
 | 维度 | 内容 |
 |---|---|
-| **核心职责** | 发起支付、接收第三方回调、验证签名、发布 `PaymentConfirmed` |
-| **聚合根** | `Payment`（v1 可选，支付流水表待建） |
+| **核心职责** | 发起支付、接收第三方回调、验证签名、调用 Order 更新订单状态、写入支付流水、发布 `PaymentConfirmed` |
+| **聚合根** | `Payment` |
 | **拆分理由** | 支付对接外部第三方网关，天然需要防腐层。与订单内部逻辑隔离，支付渠道变更不应影响订单核心 |
 
 #### 库存上下文（Inventory）— 核心子域
@@ -261,7 +261,7 @@
 | Seckill | Inventory | **Shared Kernel / 事件驱动** | Seckill 执行 Lua 预扣直接操作 Redis key——与 Inventory 共享 Redis 库存模型。发送失败时 Seckill 自驱即时补偿（属于 Inventory 职责但由 Seckill 直接执行以降低延迟） |
 | Order | Inventory | **事件驱动** | Order 发布 `OrderTimedOut` / `OrderCancelled`，Inventory 监听并执行 Redis 回补。不直接 RPC 调用 |
 | Order | Payment | **Customer-Supplier** | Payment 需要 Order 提供 `orderNo`、`totalAmount`、`orderToken`。Order 上游，Payment 下游 |
-| Payment | Order | **事件驱动** | Payment 发布 `PaymentConfirmed`，Order 监听并执行 `UNPAID→PAID`（乐观锁保证并发安全） |
+| Payment | Order | **Customer-Supplier + 事件通知** | Payment 同步调用 `order.pay()` 更新订单状态（写入前确保水位正确），再写入支付流水；成功后额外发布 `PaymentConfirmed` 供 Notification 等下游消费。Order 是上游，定义 `pay()` 方法签名；Payment 是下游，遵从 Order 的乐观锁约束 |
 | Activity | Notification | **事件驱动** | Activity 发布 `ActivityApproved` / `ActivityRejected`，Notification 监听并按模板发私信/广播 |
 | Activity | Inventory | **事件驱动** | Activity 发布 `ActivityApproved` → Inventory 分配库存；`ActivityEnded` → Inventory 回补 goods.stock |
 | Identity | Notification | **事件驱动** | Identity 发布 `UserBanned`，Notification 监听并发送封禁通知私信 |
@@ -285,6 +285,16 @@
 1. `message_log` 有独立的状态机（INIT→SENT/FAIL）和生命周期（扫描→投递→重试），不随订单状态变化
 2. 扫描线程按 `idx_status_retry` 直接拉取，不应通过订单聚合根
 3. 未来可能有其他业务类型（非订单）也使用 `message_log`
+
+**为什么 Payment 同步调用 `order.pay()` 而不是纯事件驱动？**
+
+DDD 上下文映射原设计 Payment 通过 `PaymentConfirmed` 事件触发 Order 状态变更。但实际实现中 Payment 同步调用 `order.pay()` 再写流水，原因：
+
+1. **事务一致性**：支付流水（`payment`）与订单状态（`seckill_order`）需要在一个 DB 事务边界内完成。异步事件存在时间窗，用户可能在中间态发起重复支付
+2. **幂等降级**：`order.pay()` 内部通过乐观锁 `WHERE status='UNPAID'` 保证并发安全，Payment 写入流水通过 `uk_payment_order_no` 保证幂等。若 `order.pay()` 失败（如订单已取消），整个事务回滚，不产生孤流水
+3. **`PaymentConfirmed` 事件依然存在**，供 Notification 等下游消费（发送支付成功通知），但不再是订单状态变更的唯一触发器
+
+与 Seckill→Order 不同，支付入口 QPS 极低（用户手动触发），不需要 MQ 削峰，同步调用更简单可靠。
 
 ---
 

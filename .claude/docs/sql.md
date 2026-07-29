@@ -85,6 +85,22 @@
 | is_read | 0/1 | 是否已读 |
 | created_at | datetime | 创建时间 |
 
+### 支付流水表 —— payment
+
+> 与订单解耦，即使后续接入第三方支付也是独立表。uk_payment_order_no 保证幂等。
+
+| 字段名 | 约束 | 说明 |
+| --- | --- | --- |
+| payment_id | 主键, BIGINT | 雪花算法 |
+| order_no | BIGINT, UNIQUE | 订单号（逻辑关联 seckill_order.order_no） |
+| user_id | BIGINT | 买家ID（逻辑关联 sys_user.user_id） |
+| amount | decimal(10,2) | 支付金额 |
+| status | ENUM('SUCCESS', 'REFUND') | SUCCESS 成功 / REFUND 退款（预留） |
+| pay_time | datetime | 支付时间 |
+| created_at | datetime, CURRENT_TIMESTAMP | 创建时间 |
+
+索引：UNIQUE(order_no)
+
 ### 本地消息表 —— message_log
 
 > 用途：配合本地消息表方案，记录需要发送的 MQ 消息，由后台线程扫描并投递。

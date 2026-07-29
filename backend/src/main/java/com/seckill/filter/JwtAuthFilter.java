@@ -1,5 +1,6 @@
 package com.seckill.filter;
 
+import com.seckill.common.constant.BanStatus;
 import com.seckill.common.security.CurrentUser;
 import com.seckill.common.security.JwtUtil;
 import com.seckill.common.security.SecurityContext;
@@ -132,7 +133,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             Long userId = Long.valueOf(uid);
             UserInfo info = userService.getUserInfo(userId);
-            if (info != null && info.getRole() != null) {
+            if (info != null && info.getRole() != null && info.getBanStatus() != BanStatus.banned) {
                 setSecurityContexts(info.getUserId(), info.getUserName(), info.getRole().name());
             }
         } catch (NumberFormatException e) {

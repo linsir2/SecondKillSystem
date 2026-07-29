@@ -242,6 +242,18 @@ public class UserServiceImpl implements UserService {
         String newAccess = jwtUtil.generateAccessToken(user.getUserId(), user.getUserName(), user.getRole());
         String newRefresh = jwtUtil.generateRefreshToken(user.getUserId());
 
+        // ---- 5. 废弃旧 refresh token（防重放） ----
+        try {
+            long refreshTtl = claims.getExpiration().getTime() - System.currentTimeMillis();
+            if (refreshTtl > 0) {
+                redisTemplate.opsForValue().set(
+                        "seckill:rbl:" + JwtUtil.sha256Hex(refreshToken), "1",
+                        Duration.ofMillis(refreshTtl));
+            }
+        } catch (Exception e) {
+            log.debug("Failed to blacklist old refresh token: {}", e.getMessage());
+        }
+
         return new LoginVO(newAccess, newRefresh, user.getUserId(), user.getUserName(), user.getRole());
     }
 
