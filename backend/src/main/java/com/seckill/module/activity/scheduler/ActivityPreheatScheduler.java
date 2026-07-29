@@ -35,8 +35,14 @@ public class ActivityPreheatScheduler {
     private final ActivityService activityService;
 
     @Scheduled(fixedRate = 60000)
-    public void preheatAndStart() {
+    public void processActivities() {
         LocalDateTime now = LocalDateTime.now();
+        phase1_preheatAndStart(now);
+        phase2_endExpired(now);
+        phase3_restoreStock(now);
+    }
+
+    private void phase1_preheatAndStart(LocalDateTime now) {
         LocalDateTime deadline = now.plusMinutes(10);
 
         List<Activity> activities = activityMapper.selectList(
@@ -54,6 +60,40 @@ public class ActivityPreheatScheduler {
                 }
             } catch (Exception e) {
                 log.error("Failed to process activity {}", a.getActivityId(), e);
+            }
+        }
+    }
+
+    private void phase2_endExpired(LocalDateTime now) {
+        List<Activity> activities = activityMapper.selectList(
+                new LambdaQueryWrapper<Activity>()
+                        .eq(Activity::getStatus, ActivityStatus.running)
+                        .le(Activity::getEndTime, now));
+
+        for (Activity a : activities) {
+            try {
+                activityService.endActivity(a.getActivityId());
+                log.info("Activity {} ended", a.getActivityId());
+            } catch (Exception e) {
+                log.error("Failed to end activity {}", a.getActivityId(), e);
+            }
+        }
+    }
+
+    private void phase3_restoreStock(LocalDateTime now) {
+        LocalDateTime restoreDeadline = now.minusMinutes(4);
+
+        List<Activity> activities = activityMapper.selectList(
+                new LambdaQueryWrapper<Activity>()
+                        .eq(Activity::getStatus, ActivityStatus.ended)
+                        .le(Activity::getEndTime, restoreDeadline));
+
+        for (Activity a : activities) {
+            try {
+                activityService.restoreActivityStock(a.getActivityId());
+                log.info("Activity {} stock restored", a.getActivityId());
+            } catch (Exception e) {
+                log.error("Failed to restore stock for activity {}", a.getActivityId(), e);
             }
         }
     }

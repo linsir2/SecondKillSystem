@@ -18,4 +18,14 @@ public interface GoodsMapper extends BaseMapper<Goods> {
      */
     @Update("UPDATE goods SET stock = stock - #{delta} WHERE goods_id = #{goodsId} AND stock >= #{delta}")
     int deductStock(@Param("goodsId") Long goodsId, @Param("delta") int delta);
+
+    /**
+     * 原子回补库存（活动结束后归还未售库存）。
+     *
+     * @param goodsId 商品 ID
+     * @param delta   回补数量
+     * @return 受影响行数（0 表示商品不存在）
+     */
+    @Update("UPDATE goods SET stock = stock + #{delta} WHERE goods_id = #{goodsId}")
+    int addStock(@Param("goodsId") Long goodsId, @Param("delta") int delta);
 }

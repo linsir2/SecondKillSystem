@@ -40,6 +40,17 @@ public interface GoodsService {
     List<GoodsInfo> getGoodsInfoList(List<Long> goodsIds, Long merchantId);
 
     /**
+     * 活动结束后按 Redis 剩余库存回补商品库存。
+     * <p>系统内部调用（定时任务上下文），不做归属校验。</p>
+     *
+     * @param goodsId 商品 ID
+     * @param delta   回补数量，须 ≥ 0
+     * @throws IllegalArgumentException goodsId 为 null 或 delta &lt; 0
+     * @throws BusinessException       商品不存在（affected=0）
+     */
+    void restoreStock(Long goodsId, int delta);
+
+    /**
      * 审核通过时预占秒杀库存（goods.stock -= delta）。
      * <p>原子 SQL 扣减，不做先查后改。失败抛异常。</p>
      *

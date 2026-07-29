@@ -30,14 +30,16 @@ public interface OrderService {
     /**
      * 支付订单 UNPAID → PAID。
      *
-     * <p>乐观锁：先 {@code selectById} 校验存在性和状态，再 UPDATE ... WHERE order_no=? AND status='UNPAID'。
+     * <p>乐观锁：先 {@code selectById} 校验存在性和状态，
+     * 再 UPDATE ... WHERE order_no=? AND status='UNPAID'。
      * 更新影响行数为 0 时重新查询并给出具体提示。</p>
      *
      * @param orderNo 订单号（不可 null）
-     * @throws IllegalArgumentException orderNo 为 null
-     * @throws com.seckill.common.exception.BusinessException 订单不存在 / 状态不合法 / 乐观锁冲突
+     * @param userId  买家用户 ID（不可 null，须与订单 userId 一致）
+     * @throws IllegalArgumentException orderNo / userId 为 null
+     * @throws com.seckill.common.exception.BusinessException 订单不存在 / 无权支付 / 状态不合法 / 乐观锁冲突
      */
-    void pay(Long orderNo);
+    void pay(Long orderNo, Long userId);
 
     /**
      * 取消订单 UNPAID → CANCELLED。

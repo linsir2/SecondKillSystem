@@ -926,6 +926,320 @@ class ActivityServiceTest {
     }
 
     // ========================================================================
+    // endActivity
+    // ========================================================================
+
+    @Nested
+    @DisplayName("endActivity")
+    class EndActivity {
+
+        private final Long activityId = 30L;
+
+        private Activity runningActivity() {
+            Activity a = new Activity();
+            a.setActivityId(activityId);
+            a.setStatus(ActivityStatus.running);
+            return a;
+        }
+
+        @Test
+        @DisplayName("A1 running → ended")
+        void success() {
+            Activity activity = runningActivity();
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+            when(activityMapper.update(any(Activity.class), any())).thenReturn(1);
+
+            activityService.endActivity(activityId);
+
+            assertThat(activity.getStatus()).isEqualTo(ActivityStatus.ended);
+            verify(activityMapper).update(eq(activity), any());
+        }
+
+        @Test
+        @DisplayName("A2 活动不存在 → 静默跳过")
+        void notFound() {
+            when(activityMapper.selectById(activityId)).thenReturn(null);
+
+            activityService.endActivity(activityId);
+
+            verify(activityMapper, never()).update(any(), any());
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = ActivityStatus.class, names = {"draft", "pending", "preheating", "ended"})
+        @DisplayName("A3-A5 状态不是 running → 幂等跳过")
+        void notRunningIdempotent(ActivityStatus status) {
+            Activity activity = runningActivity();
+            activity.setStatus(status);
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+
+            activityService.endActivity(activityId);
+
+            verify(activityMapper, never()).update(any(), any());
+        }
+
+        @Test
+        @DisplayName("A6 乐观锁冲突 → BusinessException")
+        void lockConflict() {
+            Activity activity = runningActivity();
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+            when(activityMapper.update(any(Activity.class), any())).thenReturn(0);
+
+            assertThatThrownBy(() -> activityService.endActivity(activityId))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("结束失败");
+        }
+    }
+
+    // ========================================================================
+    // restoreActivityStock
+    // ========================================================================
+
+    @Nested
+    @DisplayName("restoreActivityStock")
+    class RestoreActivityStock {
+
+        private final Long activityId = 30L;
+        private final Long sgId = 100L;
+        private final Long goodsId = 200L;
+
+        private Activity endedActivity() {
+            Activity a = new Activity();
+            a.setActivityId(activityId);
+            a.setStatus(ActivityStatus.ended);
+            return a;
+        }
+
+        private SeckillGoods newSg(Long sgId, Long goodsId) {
+            SeckillGoods sg = new SeckillGoods();
+            sg.setSeckillGoodsId(sgId);
+            sg.setGoodsId(goodsId);
+            return sg;
+        }
+
+        @Test
+        @DisplayName("R1 1sg 剩余 stock=37 → restoreStock(37) + 4 key 清理")
+        void singleSgPartialSold() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("37");
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService).restoreStock(goodsId, 37);
+            verify(redisTemplate).delete("seckill:stock:30:100");
+            verify(redisTemplate).delete("seckill:users:30:100");
+            verify(redisTemplate).delete("seckill:limit:30:100");
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R2 活动不存在 → 跳过")
+        void activityNotFound() {
+            when(activityMapper.selectById(activityId)).thenReturn(null);
+
+            activityService.restoreActivityStock(activityId);
+
+            verifyNoInteractions(seckillGoodsMapper, goodsService);
+        }
+
+        @Test
+        @DisplayName("R3 状态不是 ended → 跳过")
+        void notEnded() {
+            Activity activity = endedActivity();
+            activity.setStatus(ActivityStatus.running);
+            when(activityMapper.selectById(activityId)).thenReturn(activity);
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(seckillGoodsMapper, never()).selectList(any());
+            verifyNoInteractions(goodsService);
+        }
+
+        @Test
+        @DisplayName("R4 已回补（Redis stock key 不存在）→ 跳过此 sg")
+        void alreadyRestored() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(valueOps.get("seckill:stock:30:100")).thenReturn(null);
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService, never()).restoreStock(anyLong(), anyInt());
+            verify(redisTemplate, never()).delete("seckill:stock:30:100");
+            verify(redisTemplate, never()).delete("seckill:users:30:100");
+            verify(redisTemplate, never()).delete("seckill:limit:30:100");
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R5 3sg 混合（有库存 / 已回补 / 卖光）")
+        void multipleSgsMixed() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(
+                    newSg(100L, 200L), newSg(101L, 201L), newSg(102L, 202L)));
+
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("5");   // sg1: 5 remaining
+            when(valueOps.get("seckill:stock:30:101")).thenReturn(null);  // sg2: already restored
+            when(valueOps.get("seckill:stock:30:102")).thenReturn("0");   // sg3: sold out
+
+            activityService.restoreActivityStock(activityId);
+
+            // sg1 — restore + cleanup
+            verify(goodsService).restoreStock(200L, 5);
+            verify(redisTemplate).delete("seckill:stock:30:100");
+            verify(redisTemplate).delete("seckill:users:30:100");
+            verify(redisTemplate).delete("seckill:limit:30:100");
+            // sg2 — skipped completely
+            verify(redisTemplate, never()).delete("seckill:stock:30:101");
+            // sg3 — stock=0, no restore, keys cleaned
+            verify(goodsService, never()).restoreStock(eq(202L), anyInt());
+            verify(redisTemplate).delete("seckill:stock:30:102");
+            verify(redisTemplate).delete("seckill:users:30:102");
+            verify(redisTemplate).delete("seckill:limit:30:102");
+            // pending at end
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R6 全卖光 stock=0 → 不回补，清理 key")
+        void allSoldOut() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("0");
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService, never()).restoreStock(anyLong(), anyInt());
+            verify(redisTemplate).delete("seckill:stock:30:100");
+            verify(redisTemplate).delete("seckill:users:30:100");
+            verify(redisTemplate).delete("seckill:limit:30:100");
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R7 restoreStock 抛异常 → catch 跳过，不清理 key（留待重试）")
+        void restoreStockThrows() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("37");
+            doThrow(new RuntimeException("DB error")).when(goodsService).restoreStock(goodsId, 37);
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService).restoreStock(goodsId, 37);
+            verify(redisTemplate, never()).delete("seckill:stock:30:100");
+            verify(redisTemplate, never()).delete("seckill:users:30:100");
+            verify(redisTemplate, never()).delete("seckill:limit:30:100");
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R8 seckill_goods 为空 → 只清理 pending key")
+        void emptySeckillGoods() {
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of());
+
+            activityService.restoreActivityStock(activityId);
+
+            verifyNoInteractions(goodsService);
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R9 Redis 值非法 → catch+log, 清理 key")
+        void invalidRedisValue() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("abc");
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService, never()).restoreStock(anyLong(), anyInt());
+            verify(redisTemplate).delete("seckill:stock:30:100");
+            verify(redisTemplate).delete("seckill:users:30:100");
+            verify(redisTemplate).delete("seckill:limit:30:100");
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R10 所有 sg 的 stock key 都不存在 → 全部跳过")
+        void allAlreadyRestored() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(
+                    newSg(100L, 200L), newSg(101L, 201L)));
+
+            when(valueOps.get("seckill:stock:30:100")).thenReturn(null);
+            when(valueOps.get("seckill:stock:30:101")).thenReturn(null);
+
+            activityService.restoreActivityStock(activityId);
+
+            verifyNoInteractions(goodsService);
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("R11 Redis DEL 抛异常 → catch+log, 继续下一个 sg")
+        void deleteThrows() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(
+                    newSg(100L, 200L), newSg(101L, 201L)));
+
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("5");
+            when(valueOps.get("seckill:stock:30:101")).thenReturn("3");
+
+            doThrow(new RuntimeException("Redis timeout"))
+                    .when(redisTemplate).delete("seckill:stock:30:100");
+
+            activityService.restoreActivityStock(activityId);
+
+            // sg1: restoreStock 调了，delete 抛异常 → 跳过清理
+            verify(goodsService).restoreStock(200L, 5);
+            // sg2: 正常
+            verify(goodsService).restoreStock(201L, 3);
+            // pending 始终清理
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+
+        @Test
+        @DisplayName("C1 两次顺序调用 → 第一次完整, 第二次跳过所有 sg")
+        void twoSequentialCalls() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+
+            // 第一次: stock 存在
+            when(valueOps.get("seckill:stock:30:100")).thenReturn("13");
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService).restoreStock(goodsId, 13);
+            verify(redisTemplate).delete("seckill:stock:30:100");
+
+            // 重置 mock 模拟第二次独立调用
+            reset(goodsService, redisTemplate, valueOps);
+            when(activityMapper.selectById(activityId)).thenReturn(endedActivity());
+            when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(newSg(sgId, goodsId)));
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            // 第二次: stock key 已被清除 → null
+            when(valueOps.get("seckill:stock:30:100")).thenReturn(null);
+
+            activityService.restoreActivityStock(activityId);
+
+            verify(goodsService, never()).restoreStock(anyLong(), anyInt());
+            verify(redisTemplate).delete("seckill:pending:30");
+        }
+    }
+
+    // ========================================================================
     // Helpers — 外部类工具方法，所有内部类共享
     // ========================================================================
 

@@ -63,6 +63,17 @@ public class GoodsServiceImpl implements GoodsService {
     }
 
     @Override
+    public void restoreStock(Long goodsId, int delta) {
+        if (goodsId == null) throw new IllegalArgumentException("goodsId must not be null");
+        if (delta < 0) throw new IllegalArgumentException("delta must be non-negative");
+        if (delta == 0) return;
+        int affected = goodsMapper.addStock(goodsId, delta);
+        if (affected == 0) {
+            throw new BusinessException("库存回补失败，商品不存在");
+        }
+    }
+
+    @Override
     public void deductStock(Long goodsId, Long merchantId, int delta) {
         if (goodsId == null) throw new IllegalArgumentException("goodsId must not be null");
         if (merchantId == null) throw new IllegalArgumentException("merchantId must not be null");

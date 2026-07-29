@@ -20,6 +20,8 @@ import com.seckill.module.goods.service.GoodsService;
 import com.seckill.module.user.mapper.SysUserMapper;
 import com.seckill.module.user.model.entity.SysUser;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,8 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class ActivityService {
+
+    private static final Logger log = LoggerFactory.getLogger(ActivityService.class);
 
     private final ActivityMapper activityMapper;
     private final SeckillGoodsMapper seckillGoodsMapper;
@@ -426,6 +430,75 @@ public class ActivityService {
         if (affected == 0) {
             throw new BusinessException("活动启动失败，请刷新重试");
         }
+    }
+
+    /**
+     * running → ended（活动结束）。
+     * <p>幂等：活动不存在或状态不是 running 时直接返回。</p>
+     */
+    @Transactional
+    public void endActivity(Long activityId) {
+        Activity activity = activityMapper.selectById(activityId);
+        if (activity == null || activity.getStatus() != ActivityStatus.running) return;
+
+        activity.end();
+
+        LambdaUpdateWrapper<Activity> wrapper = new LambdaUpdateWrapper<Activity>()
+                .eq(Activity::getActivityId, activityId)
+                .eq(Activity::getStatus, ActivityStatus.running);
+        int affected = activityMapper.update(activity, wrapper);
+        if (affected == 0) {
+            throw new BusinessException("活动结束失败，请刷新重试");
+        }
+    }
+
+    /**
+     * 活动结束后回补未售库存 + 清理 Redis（endTime + 4min 后由定时任务触发）。
+     *
+     * <p>幂等：Redis stock key 不存在即视为已回补，跳过该商品。
+     * 非法值（非数字）也会清理 key 以避免无限重试。</p>
+     */
+    @Transactional
+    public void restoreActivityStock(Long activityId) {
+        Activity activity = activityMapper.selectById(activityId);
+        if (activity == null || activity.getStatus() != ActivityStatus.ended) return;
+
+        List<SeckillGoods> sgList = seckillGoodsMapper.selectList(
+                new LambdaQueryWrapper<SeckillGoods>().eq(SeckillGoods::getActivityId, activityId));
+
+        for (SeckillGoods sg : sgList) {
+            String stockKey = redisKey("stock", activityId, sg.getSeckillGoodsId());
+            String usersKey = redisKey("users", activityId, sg.getSeckillGoodsId());
+            String limitKey = redisKey("limit", activityId, sg.getSeckillGoodsId());
+
+            try {
+                String remaining = redisTemplate.opsForValue().get(stockKey);
+                if (remaining == null) continue;
+
+                int stock;
+                try {
+                    stock = Integer.parseInt(remaining);
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid stock value for seckill_goods {}: {}", sg.getSeckillGoodsId(), remaining, e);
+                    redisTemplate.delete(stockKey);
+                    redisTemplate.delete(usersKey);
+                    redisTemplate.delete(limitKey);
+                    continue;
+                }
+
+                if (stock > 0) {
+                    goodsService.restoreStock(sg.getGoodsId(), stock);
+                }
+
+                redisTemplate.delete(stockKey);
+                redisTemplate.delete(usersKey);
+                redisTemplate.delete(limitKey);
+            } catch (Exception e) {
+                log.error("Failed to restore stock for seckill_goods {}", sg.getSeckillGoodsId(), e);
+            }
+        }
+
+        redisTemplate.delete("seckill:pending:" + activityId);
     }
 
     private static String redisKey(String prefix, Long activityId, Long seckillGoodsId) {

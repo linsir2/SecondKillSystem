@@ -650,4 +650,60 @@ class GoodsServiceTest {
             assertThat(list).allMatch(vo -> vo.getGoodsName().contains("本店"));
         }
     }
+
+    // ========================================================================
+    // restoreStock — 活动结束后回补库存
+    // ========================================================================
+
+    @Nested
+    @DisplayName("restoreStock")
+    class RestoreStock {
+
+        private final Long goodsId = 300L;
+
+        @Test
+        @DisplayName("G1 delta=5 → addStock 调用, affected=1 无异常")
+        void happyPath() {
+            when(goodsMapper.addStock(goodsId, 5)).thenReturn(1);
+
+            goodsService.restoreStock(goodsId, 5);
+
+            verify(goodsMapper).addStock(goodsId, 5);
+        }
+
+        @Test
+        @DisplayName("G2 goodsId=null → IAE")
+        void nullGoodsId() {
+            assertThatThrownBy(() -> goodsService.restoreStock(null, 5))
+                    .isInstanceOf(IllegalArgumentException.class);
+            verify(goodsMapper, never()).addStock(anyLong(), anyInt());
+        }
+
+        @Test
+        @DisplayName("G3 delta=-1 → IAE")
+        void negativeDelta() {
+            assertThatThrownBy(() -> goodsService.restoreStock(goodsId, -1))
+                    .isInstanceOf(IllegalArgumentException.class);
+            verify(goodsMapper, never()).addStock(anyLong(), anyInt());
+        }
+
+        @Test
+        @DisplayName("G4 delta=0 → 直接 return, 不调 mapper")
+        void zeroDelta() {
+            goodsService.restoreStock(goodsId, 0);
+
+            verify(goodsMapper, never()).addStock(anyLong(), anyInt());
+        }
+
+        @Test
+        @DisplayName("G5 mapper 返回 0（商品不存在）→ BusinessException")
+        void goodsNotFound() {
+            when(goodsMapper.addStock(goodsId, 5)).thenReturn(0);
+
+            assertThatThrownBy(() -> goodsService.restoreStock(goodsId, 5))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("回补失败");
+            verify(goodsMapper).addStock(goodsId, 5);
+        }
+    }
 }

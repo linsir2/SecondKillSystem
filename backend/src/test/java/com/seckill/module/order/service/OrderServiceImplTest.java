@@ -403,9 +403,28 @@ class OrderServiceImplTest {
     // ========================================================================
 
     @Test
+    @DisplayName("P0 userId null -> IAE")
+    void payNullUserId() {
+        assertIAE(() -> orderService.pay(ORDER_NO, null), "userId");
+    }
+
+    @Test
+    @DisplayName("P0.5 userId 与订单不匹配 -> BusinessException")
+    void payUserIdMismatch() {
+        var o = orderWithStatus(OrderStatus.UNPAID);
+        o.setUserId(99999L); // 另一个用户
+        when(orderMapper.selectById(ORDER_NO)).thenReturn(o);
+
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
+        assertTrue(ex.getMessage().contains("无权支付"));
+        verify(orderMapper, never()).update(any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
     @DisplayName("P1 orderNo null -> IAE")
     void payNullOrderNo() {
-        assertIAE(() -> orderService.pay(null), "orderNo");
+        assertIAE(() -> orderService.pay(null, USER_A), "orderNo");
     }
 
     @Test
@@ -414,7 +433,7 @@ class OrderServiceImplTest {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.UNPAID));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(1);
 
-        orderService.pay(ORDER_NO);
+        orderService.pay(ORDER_NO, USER_A);
 
         var captor = ArgumentCaptor.forClass(SeckillOrder.class);
         verify(orderMapper).update(captor.capture(), any());
@@ -428,7 +447,7 @@ class OrderServiceImplTest {
     void payOrderNotFound() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(null);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("不存在"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -439,7 +458,7 @@ class OrderServiceImplTest {
     void payAlreadyPaid() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.PAID));
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("只能支付待支付订单"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -450,7 +469,7 @@ class OrderServiceImplTest {
     void payAlreadyCancelled() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.CANCELLED));
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("只能支付待支付订单"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -464,7 +483,7 @@ class OrderServiceImplTest {
                 .thenReturn(orderWithStatus(OrderStatus.PAID));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("已支付"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(orderMapper).update(any(SeckillOrder.class), any());
@@ -479,7 +498,7 @@ class OrderServiceImplTest {
                 .thenReturn(orderWithStatus(OrderStatus.CANCELLED));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("已取消"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(eventPublisher, never()).publishEvent(any());
@@ -493,7 +512,7 @@ class OrderServiceImplTest {
                 .thenReturn(null);
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("不存在"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(eventPublisher, never()).publishEvent(any());
@@ -518,7 +537,7 @@ class OrderServiceImplTest {
 
         for (int i = 0; i < 2; i++) {
             new Thread(() -> {
-                try { orderService.pay(ORDER_NO); results.add("success"); }
+                try { orderService.pay(ORDER_NO, USER_A); results.add("success"); }
                 catch (BusinessException e) { results.add(e.getMessage()); }
                 finally { latch.countDown(); }
             }).start();
@@ -548,13 +567,13 @@ class OrderServiceImplTest {
         var results = Collections.synchronizedList(new ArrayList<String>());
 
         new Thread(() -> {
-            try { orderService.pay(ORDER_NO);    results.add("pay_ok"); }
-            catch (BusinessException e) {         results.add("pay:" + e.getMessage()); }
+            try { orderService.pay(ORDER_NO, USER_A); results.add("pay_ok"); }
+            catch (BusinessException e) { results.add("pay:" + e.getMessage()); }
             finally { latch.countDown(); }
         }).start();
         new Thread(() -> {
             try { orderService.cancel(ORDER_NO); results.add("cancel_ok"); }
-            catch (BusinessException e) {         results.add("cancel:" + e.getMessage()); }
+            catch (BusinessException e) { results.add("cancel:" + e.getMessage()); }
             finally { latch.countDown(); }
         }).start();
         latch.await();
@@ -898,7 +917,7 @@ class OrderServiceImplTest {
             finally { latch.countDown(); }
         }).start();
         new Thread(() -> {
-            try { orderService.pay(ORDER_NO); results.add("pay_ok"); }
+            try { orderService.pay(ORDER_NO, USER_A); results.add("pay_ok"); }
             catch (BusinessException e) { results.add("pay:" + e.getMessage()); }
             finally { latch.countDown(); }
         }).start();

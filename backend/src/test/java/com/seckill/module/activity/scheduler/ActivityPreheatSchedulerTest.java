@@ -55,7 +55,7 @@ class ActivityPreheatSchedulerTest {
             Activity a = anActivity(10L, LocalDateTime.now().minusSeconds(30));
             when(activityMapper.selectList(any())).thenReturn(List.of(a));
 
-            scheduler.preheatAndStart();
+            scheduler.processActivities();
 
             verify(activityService).preheatActivity(10L);
             verify(activityService).startActivity(10L);
@@ -67,7 +67,7 @@ class ActivityPreheatSchedulerTest {
             Activity a = anActivity(10L, LocalDateTime.now().plusMinutes(5));
             when(activityMapper.selectList(any())).thenReturn(List.of(a));
 
-            scheduler.preheatAndStart();
+            scheduler.processActivities();
 
             verify(activityService).preheatActivity(10L);
             verify(activityService, never()).startActivity(10L);
@@ -78,7 +78,7 @@ class ActivityPreheatSchedulerTest {
         void nothingToPreheat() {
             when(activityMapper.selectList(any())).thenReturn(List.of());
 
-            scheduler.preheatAndStart();
+            scheduler.processActivities();
 
             verify(activityService, never()).preheatActivity(any());
             verify(activityService, never()).startActivity(any());
@@ -93,7 +93,7 @@ class ActivityPreheatSchedulerTest {
 
             doThrow(new RuntimeException("DB error")).when(activityService).preheatActivity(10L);
 
-            scheduler.preheatAndStart();
+            scheduler.processActivities();
 
             verify(activityService).preheatActivity(20L);
             verify(activityService).startActivity(20L);

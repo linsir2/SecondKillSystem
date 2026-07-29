@@ -67,4 +67,16 @@ public class Activity {
         }
         this.status = ActivityStatus.running;
     }
+
+    /**
+     * running → ended（活动结束）。
+     *
+     * @throws IllegalStateException 当前状态不是 running
+     */
+    public void end() {
+        if (this.status != ActivityStatus.running) {
+            throw new IllegalStateException("当前状态不可结束");
+        }
+        this.status = ActivityStatus.ended;
+    }
 }
