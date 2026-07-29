@@ -52,7 +52,7 @@ rocketmq:
 # JWT
 # ====================================================================
 jwt:
-  secret: ${JWT_SECRET:MzI4MjdhZjM2NTg5MGFmYjM2NTg5MGFmYjM2NTg5MGFmYjM2NTg5MA}
+  secret: ${JWT_SECRET}
   access-expiration: 86400000    # 24h
   refresh-expiration: 604800000  # 7d
   dev-auth-fallback: false       # dev 环境由 application-dev.yml 覆盖为 true

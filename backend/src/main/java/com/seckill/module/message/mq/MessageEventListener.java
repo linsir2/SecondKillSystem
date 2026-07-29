@@ -17,6 +17,8 @@ import com.seckill.module.message.service.UserMessageService;
 import com.seckill.module.message.websocket.NotificationWebSocketHandler;
 import com.seckill.module.user.mapper.SysUserMapper;
 import com.seckill.module.user.model.dto.UserBannedEvent;
+import com.seckill.module.user.model.dto.UserRegisteredEvent;
+import com.seckill.module.user.model.dto.UserUnbannedEvent;
 import com.seckill.module.user.model.entity.SysUser;
 import com.seckill.module.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -136,6 +138,25 @@ public class MessageEventListener {
         userMessageService.sendMessage(event.userId(), MessageType.ban_info, content, null);
     }
 
+    /**
+     * 用户被解封 → 解封通知。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 200))
+    public void onUserUnbanned(UserUnbannedEvent event) {
+        String content = MessageTemplates.userUnbanned();
+        userMessageService.sendMessage(event.userId(), MessageType.ban_info, content, null);
+    }
+
+    /**
+     * 用户注册成功 → 欢迎通知。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onUserRegistered(UserRegisteredEvent event) {
+        String content = MessageTemplates.userWelcome(event.email());
+        userMessageService.sendMessage(event.userId(), MessageType.welcome, content, null);
+    }
+
     // ========================================================================
     // Retry fallback
     // ========================================================================
@@ -153,5 +174,10 @@ public class MessageEventListener {
     @Recover
     public void recoverUserBanned(Exception e, UserBannedEvent event) {
         log.error("User banned notification failed after retries, userId={}", event.userId(), e);
+    }
+
+    @Recover
+    public void recoverUserUnbanned(Exception e, UserUnbannedEvent event) {
+        log.error("User unbanned notification failed after retries, userId={}", event.userId(), e);
     }
 }

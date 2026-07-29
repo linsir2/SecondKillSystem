@@ -67,4 +67,21 @@ public final class MessageTemplates {
     public static String userBanned() {
         return "您的账号因违规操作已被封禁，封禁期间无法参与秒杀活动。如有疑问请联系管理员。";
     }
+
+    /**
+     * 解封通知。
+     */
+    public static String userUnbanned() {
+        return "您的账号已被解封，现在可以正常登录并参与秒杀活动。";
+    }
+
+    /**
+     * 新用户欢迎通知。
+     *
+     * @param email 注册邮箱
+     */
+    public static String userWelcome(String email) {
+        Objects.requireNonNull(email, "email must not be null");
+        return "欢迎注册秒杀系统！您已使用邮箱 " + email + " 成功注册。祝您购物愉快！";
+    }
 }

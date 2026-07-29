@@ -10,6 +10,8 @@ import com.seckill.module.user.model.dto.*;
 import com.seckill.module.user.model.entity.SysUser;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,6 +31,8 @@ import java.util.stream.Collectors;
 public class UserServiceImpl implements UserService {
 
     private static final String BLACKLIST_KEY = "seckill:blacklist";
+
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     private final SysUserMapper userMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -185,12 +189,12 @@ public class UserServiceImpl implements UserService {
         // ---- 1. 查找用户 ----
         SysUser user = userMapper.selectOne(new QueryWrapper<SysUser>().eq("email", req.email()));
         if (user == null) {
-            throw new BusinessException("邮箱未注册");
+            throw new BusinessException("邮箱或密码错误");
         }
 
         // ---- 2. 校验密码 ----
         if (!passwordEncoder.matches(req.password(), user.getPassword())) {
-            throw new BusinessException("密码错误");
+            throw new BusinessException("邮箱或密码错误");
         }
 
         // ---- 3. 封禁检查 ----
@@ -211,6 +215,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginVO refresh(String refreshToken) {
+        // ---- 0. 黑名单检查 ----
+        if (isRefreshTokenBlacklisted(refreshToken)) {
+            throw new BusinessException("登录已过期，请重新登录");
+        }
+
         Claims claims;
         try {
             claims = jwtUtil.validateRefreshToken(refreshToken);
@@ -224,7 +233,12 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("用户不存在");
         }
 
-        // 签发新 token 对（refresh token 也刷新，延长有效期）
+        // ---- 3. 封禁检查（与 login 一致） ----
+        if (user.getBanStatus() == BanStatus.banned) {
+            throw new BusinessException("账户已被封禁");
+        }
+
+        // ---- 4. 签发新 token 对（refresh token 也刷新，延长有效期） ----
         String newAccess = jwtUtil.generateAccessToken(user.getUserId(), user.getUserName(), user.getRole());
         String newRefresh = jwtUtil.generateRefreshToken(user.getUserId());
 
@@ -246,6 +260,37 @@ public class UserServiceImpl implements UserService {
     }
 
     // ========================================================================
+    // 登出
+    // ========================================================================
+
+    @Override
+    public void logout(Long userId, String refreshToken, String accessToken) {
+        try {
+            Claims accessClaims = jwtUtil.validateAccessToken(accessToken);
+            long accessTtl = accessClaims.getExpiration().getTime() - System.currentTimeMillis();
+            if (accessTtl > 0) {
+                redisTemplate.opsForValue().set(
+                        "seckill:abl:" + JwtUtil.sha256Hex(accessToken), "1",
+                        Duration.ofMillis(accessTtl));
+            }
+        } catch (Exception e) {
+            log.debug("Failed to blacklist access token for user {}: {}", userId, e.getMessage());
+        }
+
+        try {
+            Claims refreshClaims = jwtUtil.validateRefreshToken(refreshToken);
+            long refreshTtl = refreshClaims.getExpiration().getTime() - System.currentTimeMillis();
+            if (refreshTtl > 0) {
+                redisTemplate.opsForValue().set(
+                        "seckill:rbl:" + JwtUtil.sha256Hex(refreshToken), "1",
+                        Duration.ofMillis(refreshTtl));
+            }
+        } catch (Exception e) {
+            log.debug("Failed to blacklist refresh token for user {}: {}", userId, e.getMessage());
+        }
+    }
+
+    // ========================================================================
     // 转换
     // ========================================================================
 
@@ -255,5 +300,15 @@ public class UserServiceImpl implements UserService {
         }
         return new UserInfo(entity.getUserId(), entity.getUserName(),
                 entity.getEmail(), entity.getRole(), entity.getBanStatus());
+    }
+
+    private boolean isRefreshTokenBlacklisted(String refreshToken) {
+        try {
+            return Boolean.TRUE.equals(
+                    redisTemplate.hasKey("seckill:rbl:" + JwtUtil.sha256Hex(refreshToken)));
+        } catch (Exception e) {
+            log.debug("Refresh token blacklist check failed: {}", e.getMessage());
+            return false;
+        }
     }
 }

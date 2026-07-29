@@ -10,6 +10,7 @@ import com.seckill.module.activity.model.dto.CreateActivityRequest;
 import com.seckill.module.activity.model.vo.ActivityVO;
 import com.seckill.module.activity.service.ActivityService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +32,7 @@ public class ActivityController {
     /**
      * 商家提交秒杀活动审核（draft → pending）。
      */
+    @PreAuthorize("hasRole('merchant')")
     @PostMapping("/{activityId}/submit")
     public Result<ActivityVO> submitForReview(@PathVariable Long activityId) {
         CurrentUser user = SecurityContext.get();
@@ -47,6 +49,7 @@ public class ActivityController {
     /**
      * 管理员审核通过秒杀活动（pending → preheating）。
      */
+    @PreAuthorize("hasRole('admin')")
     @PostMapping("/{activityId}/approve")
     public Result<ActivityVO> approveActivity(@PathVariable Long activityId) {
         CurrentUser user = SecurityContext.get();
@@ -63,6 +66,7 @@ public class ActivityController {
     /**
      * 商家创建秒杀活动草稿。
      */
+    @PreAuthorize("hasRole('merchant')")
     @PostMapping
     public Result<ActivityVO> createActivity(@RequestBody CreateActivityRequest request) {
         CurrentUser user = SecurityContext.get();
@@ -84,6 +88,7 @@ public class ActivityController {
      *   <li>user → 可见活动（preheating / running / ended）</li>
      * </ul>
      */
+    @PreAuthorize("isAuthenticated()")
     @GetMapping
     public Result<PageVO<ActivityVO>> listActivities(
             @RequestParam(defaultValue = "1") int page,
@@ -104,6 +109,7 @@ public class ActivityController {
     /**
      * 活动详情（含秒杀商品列表）。
      */
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/{activityId}")
     public Result<ActivityVO> getActivityDetail(@PathVariable Long activityId) {
         CurrentUser user = SecurityContext.get();

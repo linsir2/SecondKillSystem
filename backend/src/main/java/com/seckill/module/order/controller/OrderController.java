@@ -1,21 +1,30 @@
 package com.seckill.module.order.controller;
 
+import com.seckill.common.exception.BusinessException;
 import com.seckill.common.result.Result;
+import com.seckill.common.security.CurrentUser;
+import com.seckill.common.security.SecurityContext;
+import com.seckill.module.order.model.dto.CancelOrderRequest;
 import com.seckill.module.order.model.vo.OrderStatusVO;
 import com.seckill.module.order.service.OrderService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 订单查询端点 —— 供前端轮询订单状态。
+ * 订单端点 —— 前端轮询订单状态 + 手动取消订单。
  *
  * <p>前端在抢购成功后获得 {@code orderToken}，轮询 {@code GET /api/v1/order/status}
- * 直到返回非 null 的 {@code status} 和 {@code orderNo}，然后跳转支付页。</p>
+ * 直到返回非 null 的 {@code status} 和 {@code orderNo}，然后跳转支付页。
+ * 支付前可调用 {@code POST /api/v1/order/cancel} 主动取消。</p>
  */
 @RestController
 @RequestMapping("/api/v1/order")
+@PreAuthorize("isAuthenticated()")
 public class OrderController {
 
     private final OrderService orderService;
@@ -29,7 +38,21 @@ public class OrderController {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("token must not be blank");
         }
-        OrderStatusVO vo = orderService.getOrderStatusVO(token);
+        CurrentUser user = SecurityContext.get();
+        if (user == null) {
+            throw new BusinessException("未登录");
+        }
+        OrderStatusVO vo = orderService.getOrderStatusVO(token, user.getUserId());
         return Result.success(vo);
+    }
+
+    @PostMapping("/cancel")
+    public Result<Void> cancel(@RequestBody CancelOrderRequest request) {
+        CurrentUser user = SecurityContext.get();
+        if (user == null) {
+            throw new BusinessException("未登录");
+        }
+        orderService.cancel(request.orderNo(), user.getUserId());
+        return Result.success(null);
     }
 }

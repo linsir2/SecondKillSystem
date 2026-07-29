@@ -1,5 +1,6 @@
 package com.seckill.module.message.service;
 
+import com.seckill.common.exception.BusinessException;
 import com.seckill.module.message.mapper.UserMessageMapper;
 import com.seckill.module.message.model.entity.UserMessage;
 import com.seckill.module.message.model.enums.MessageType;
@@ -15,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -112,22 +114,49 @@ class UserMessageServiceTest {
 
         @Test
         void happyPath() {
-            userMessageService.markAsRead(1L);
+            var msg = new UserMessage();
+            msg.setMessageId(1L);
+            msg.setUserId(100L);
+            when(userMessageMapper.selectById(1L)).thenReturn(msg);
+
+            userMessageService.markAsRead(1L, 100L);
 
             verify(userMessageMapper).markAsRead(1L);
         }
 
         @Test
         void nullMessageId_throws() {
-            assertThatThrownBy(() -> userMessageService.markAsRead(null))
+            assertThatThrownBy(() -> userMessageService.markAsRead(null, 100L))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
         @Test
-        void alreadyRead_idempotent() {
-            userMessageService.markAsRead(1L);
+        void nullUserId_throws() {
+            assertThatThrownBy(() -> userMessageService.markAsRead(1L, null))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
 
-            verify(userMessageMapper).markAsRead(1L);
+        @Test
+        void messageNotFound_throws() {
+            when(userMessageMapper.selectById(999L)).thenReturn(null);
+
+            assertThatThrownBy(() -> userMessageService.markAsRead(999L, 100L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("不存在");
+            verify(userMessageMapper, never()).markAsRead(any());
+        }
+
+        @Test
+        void userIdMismatch_throws() {
+            var msg = new UserMessage();
+            msg.setMessageId(1L);
+            msg.setUserId(999L); // 另一个用户
+            when(userMessageMapper.selectById(1L)).thenReturn(msg);
+
+            assertThatThrownBy(() -> userMessageService.markAsRead(1L, 100L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("无权操作");
+            verify(userMessageMapper, never()).markAsRead(any());
         }
     }
 

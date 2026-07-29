@@ -10,6 +10,7 @@ import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.service.SeckillStockService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/seckill")
 @RequiredArgsConstructor
+@PreAuthorize("isAuthenticated()")
 public class SeckillController {
 
     private final SeckillStockService seckillStockService;

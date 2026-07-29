@@ -149,27 +149,34 @@ public class OrderServiceImpl implements OrderService {
     // ========================================================================
 
     @Override
-    public void cancel(Long orderNo) {
+    @Transactional
+    public void cancel(Long orderNo, Long userId) {
         if (orderNo == null) throw new IllegalArgumentException("orderNo must not be null");
+        if (userId == null) throw new IllegalArgumentException("userId must not be null");
 
         // ---- 1. 查询 ----
         SeckillOrder order = orderMapper.selectById(orderNo);
         if (order == null) throw new BusinessException("订单不存在");
 
-        // ---- 2. 实体领域行为（校验 + 设状态） ----
+        // ---- 2. 归属校验 ----
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException("无权取消该订单");
+        }
+
+        // ---- 3. 实体领域行为（校验 + 设状态） ----
         try {
             order.cancel();
         } catch (IllegalStateException e) {
             throw new BusinessException(e.getMessage());
         }
 
-        // ---- 3. 乐观锁写库 ----
+        // ---- 4. 乐观锁写库 ----
         LambdaUpdateWrapper<SeckillOrder> wrapper = new LambdaUpdateWrapper<SeckillOrder>()
                 .eq(SeckillOrder::getOrderNo, orderNo)
                 .eq(SeckillOrder::getStatus, OrderStatus.UNPAID);
         int affected = orderMapper.update(order, wrapper);
 
-        // ---- 4. 冲突处理 ----
+        // ---- 5. 冲突处理 ----
         if (affected == 0) {
             SeckillOrder current = orderMapper.selectById(orderNo);
             if (current == null) throw new BusinessException("订单不存在");
@@ -178,8 +185,11 @@ public class OrderServiceImpl implements OrderService {
             throw new BusinessException("订单状态异常");
         }
 
-        // ---- 5. 领域事件 ----
-        eventPublisher.publishEvent(new OrderCancelledEvent(orderNo, order.getOrderToken()));
+        // ---- 6. 领域事件（含 Redis 补偿所需全字段） ----
+        eventPublisher.publishEvent(new OrderCancelledEvent(
+                orderNo, order.getOrderToken(),
+                order.getActivityId(), order.getSeckillGoodsId(),
+                order.getUserId(), order.getBuyCount()));
     }
 
     // ========================================================================
@@ -187,6 +197,7 @@ public class OrderServiceImpl implements OrderService {
     // ========================================================================
 
     @Override
+    @Transactional
     public void cancelByTimeout(String orderToken) {
         if (orderToken == null || orderToken.isBlank())
             throw new IllegalArgumentException("orderToken must not be blank");
@@ -244,15 +255,17 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public OrderStatusVO getOrderStatusVO(String orderToken) {
+    public OrderStatusVO getOrderStatusVO(String orderToken, Long userId) {
         if (orderToken == null || orderToken.isBlank())
             throw new IllegalArgumentException("orderToken must not be blank");
 
         SeckillOrder order = orderMapper.selectOne(
                 new QueryWrapper<SeckillOrder>()
                         .eq("order_token", orderToken)
-                        .select("order_no", "status"));
+                        .select("order_no", "status", "user_id"));
         if (order == null) return null;
+        // 归属校验：不属于当前用户的订单不暴露
+        if (!userId.equals(order.getUserId())) return null;
         return new OrderStatusVO(order.getStatus().name(), order.getOrderNo());
     }
 }

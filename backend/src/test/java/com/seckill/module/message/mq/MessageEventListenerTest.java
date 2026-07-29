@@ -16,6 +16,8 @@ import com.seckill.module.message.service.UserMessageService;
 import com.seckill.module.user.mapper.SysUserMapper;
 import com.seckill.module.user.model.dto.UserBannedEvent;
 import com.seckill.module.user.model.dto.UserInfo;
+import com.seckill.module.user.model.dto.UserRegisteredEvent;
+import com.seckill.module.user.model.dto.UserUnbannedEvent;
 import com.seckill.module.message.websocket.NotificationWebSocketHandler;
 import com.seckill.module.user.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -31,7 +33,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -244,5 +245,47 @@ class MessageEventListenerTest {
         listener.onUserBanned(new UserBannedEvent(200L, 100L));
 
         verify(userMessageService).sendMessage(eq(200L), eq(MessageType.ban_info), anyString(), eq(null));
+    }
+
+    // ========================================================================
+    // onUserUnbanned
+    // ========================================================================
+
+    @Test
+    void userUnbanned_sendsBanInfo() {
+        listener.onUserUnbanned(new UserUnbannedEvent(300L, 100L));
+
+        verify(userMessageService).sendMessage(eq(300L), eq(MessageType.ban_info), anyString(), eq(null));
+    }
+
+    @Test
+    void userUnbanned_sendMessageThrows_propagatesOut() {
+        doThrow(new RuntimeException("DB error"))
+                .when(userMessageService).sendMessage(anyLong(), any(), anyString(), any());
+
+        assertThatThrownBy(() ->
+                listener.onUserUnbanned(new UserUnbannedEvent(300L, 100L)))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    // ========================================================================
+    // onUserRegistered
+    // ========================================================================
+
+    @Test
+    void userRegistered_sendsWelcome() {
+        listener.onUserRegistered(new UserRegisteredEvent(400L, "new@test.com", UserRole.user));
+
+        verify(userMessageService).sendMessage(eq(400L), eq(MessageType.welcome), anyString(), eq(null));
+    }
+
+    @Test
+    void userRegistered_sendMessageThrows_propagatesOut() {
+        doThrow(new RuntimeException("DB error"))
+                .when(userMessageService).sendMessage(anyLong(), any(), anyString(), any());
+
+        assertThatThrownBy(() ->
+                listener.onUserRegistered(new UserRegisteredEvent(400L, "new@test.com", UserRole.user)))
+                .isInstanceOf(RuntimeException.class);
     }
 }

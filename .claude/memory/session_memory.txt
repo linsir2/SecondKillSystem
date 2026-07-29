@@ -41,3 +41,25 @@
    - GoodsMapper.addStock() 原子 INCRBY（与 deductStock 对称）
    - 三阶段 scheduler：预热/开始 / 到期结束 / 4min 后回补
 4. 测试：ActivityTest(6) + ActivityServiceTest endActivity(6) + ActivityServiceTest restoreActivityStock(12) + GoodsServiceTest restoreStock(5) + 原 389 = 419 全绿
+
+[UPDATE] 2026-07-29 Phase 1 全链路联调（HTTP → Redis Lua → MQ）：
+1. SeckillFullChainIntegrationTest（29 用例全绿）：G1 认证与网关（JWT/黑名单/限流）、G2 参数校验、G3 业务逻辑（正常/售罄/重复/限购/未预热/最后一件/多人）、G4 MQ 可靠性（发送验证/事件体/MQ 异常补偿/补偿后可重买）、G5 高并发（30 线程 5 库存/20 线程同用户/10 线程超限购/50 线程最后一件）
+
+[UPDATE] 2026-07-29 Phase 2 全链路贯通（MQ→订单→补偿→轮询）：
+1. Phase 2 集成测试：真实 RocketMQ → SeckillOrderConsumer → OrderService.createOrder() → seckill_order + message_log（4 用例，RocketMQConsumerGroupInitializer @PostConstruct 自注册 consumer group）
+2. 确认 MessageLogScanner（8s 扫 INIT→发 1min 延时 MQ）、PendingOrphanScanner（3min 兜底 pending zset）、OrderTimedOutEventListener（Redis 补偿 INCRBY+SREM）全部就绪
+3. 确认 PaymentController POST /api/v1/payment/pay 已暴露（→ OrderService.pay 乐观锁 + Payment 流水 + PaymentConfirmedEvent）
+4. 补 OrderController GET /api/v1/order/status?token=xxx（TDD +4 测试），前端轮询查状态+orderNo 跳转支付页
+5. 全量 528 测试 0 Failure
+
+[UPDATE] 2026-07-29 修复 3 个 P0 安全漏洞：
+1. PaymentController 鉴权：之前用请求体 userId，改为 SecurityContext.get() 获取认证用户 ID，防止冒用
+2. 注册自选 admin：RegisterRequest.resolveRole() 增加 admin 降级为 user 的钳制，注册只能选 user/merchant
+3. JWT 密钥硬编码：application.yml 去掉默认值，移入 application-dev.yml（生产环境必须设 JWT_SECRET 环境变量）
+
+[UPDATE] 2026-07-29 修复手动取消流三重断裂：
+1. OrderService.cancel(Long) → cancel(Long, Long userId)，加归属校验（防止 A 取消 B 的订单）
+2. OrderCancelledEvent 补全补偿字段（activityId/seckillGoodsId/userId/buyCount），与 OrderTimedOutEvent 对称
+3. 新建 OrderCancelledEventListener，监听手动取消事件 → compensateByTimeout Redis 回补
+4. 新建 CancelOrderRequest DTO + OrderController POST /api/v1/order/cancel 端点（SecurityContext 取 userId）
+5. 新增 3 测试（归属校验/未登录/正常取消），531 全绿

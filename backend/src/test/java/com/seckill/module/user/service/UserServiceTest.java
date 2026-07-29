@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 
+import java.util.Date;
 import java.util.List;
 
 import static java.util.Collections.emptyList;
@@ -531,7 +532,7 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.login(req))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("邮箱未注册");
+                    .hasMessageContaining("邮箱或密码错误");
         }
 
         @Test
@@ -541,7 +542,7 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.login(req))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("密码错误");
+                    .hasMessageContaining("邮箱或密码错误");
         }
 
         @Test
@@ -599,6 +600,28 @@ class UserServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("用户不存在");
         }
+
+        @Test
+        void bannedUser_throws() {
+            Claims claims = mock(Claims.class);
+            when(jwtUtil.validateRefreshToken("token")).thenReturn(claims);
+            when(jwtUtil.getUserId(claims)).thenReturn(1L);
+            when(userMapper.selectById(1L)).thenReturn(createUser(1L, "张三", UserRole.user, BanStatus.banned));
+
+            assertThatThrownBy(() -> userService.refresh("token"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("被封禁");
+        }
+
+        @Test
+        void blacklistedRefreshToken_throws() {
+            when(redisTemplate.hasKey(anyString())).thenReturn(true);
+
+            assertThatThrownBy(() -> userService.refresh("revoked"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("登录已过期");
+            verify(jwtUtil, never()).validateRefreshToken(anyString());
+        }
     }
 
     // ========================================================================
@@ -627,6 +650,66 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.getCurrentUser(999L))
                     .isInstanceOf(BusinessException.class);
+        }
+    }
+
+    // ========================================================================
+    // logout
+    // ========================================================================
+
+    @Nested
+    class Logout {
+
+        @Test
+        void happyPath() {
+            Claims accessClaims = mock(Claims.class);
+            when(accessClaims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 3_600_000));
+            when(jwtUtil.validateAccessToken("access_token")).thenReturn(accessClaims);
+
+            Claims refreshClaims = mock(Claims.class);
+            when(refreshClaims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 604_800_000));
+            when(jwtUtil.validateRefreshToken("refresh_token")).thenReturn(refreshClaims);
+
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+            userService.logout(1L, "refresh_token", "access_token");
+
+            verify(valueOps).set(argThat(k -> k.startsWith("seckill:abl:")), eq("1"), any(Duration.class));
+            verify(valueOps).set(argThat(k -> k.startsWith("seckill:rbl:")), eq("1"), any(Duration.class));
+        }
+
+        @Test
+        void invalidAccessToken_doesNotThrow() {
+            when(jwtUtil.validateAccessToken("bad")).thenThrow(new JwtException("expired"));
+
+            Claims refreshClaims = mock(Claims.class);
+            when(refreshClaims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 604_800_000));
+            when(jwtUtil.validateRefreshToken("refresh_token")).thenReturn(refreshClaims);
+
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+            userService.logout(1L, "refresh_token", "bad");
+
+            verify(valueOps, never()).set(argThat(k -> k.startsWith("seckill:abl:")), anyString(), any());
+            verify(valueOps).set(argThat(k -> k.startsWith("seckill:rbl:")), eq("1"), any(Duration.class));
+        }
+
+        @Test
+        void expiredToken_skipsBlacklist() {
+            Claims accessClaims = mock(Claims.class);
+            when(accessClaims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() - 1000));
+            when(jwtUtil.validateAccessToken("expired")).thenReturn(accessClaims);
+
+            Claims refreshClaims = mock(Claims.class);
+            when(refreshClaims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 604_800_000));
+            when(jwtUtil.validateRefreshToken("refresh_token")).thenReturn(refreshClaims);
+
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+            userService.logout(1L, "refresh_token", "expired");
+
+            verify(valueOps, never()).set(argThat(k -> k.startsWith("seckill:abl:")), anyString(), any());
+            verify(valueOps).set(argThat(k -> k.startsWith("seckill:rbl:")), eq("1"), any(Duration.class));
         }
     }
 }

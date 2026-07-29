@@ -87,4 +87,13 @@ public interface UserService {
      * @throws BusinessException 用户不存在
      */
     UserInfoVO getCurrentUser(Long userId);
+
+    /**
+     * 登出 —— 将 access token 和 refresh token 加入 Redis 黑名单。
+     *
+     * @param userId       当前用户 ID
+     * @param refreshToken 待撤销的 refresh token
+     * @param accessToken  待撤销的 access token
+     */
+    void logout(Long userId, String refreshToken, String accessToken);
 }

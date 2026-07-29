@@ -45,13 +45,14 @@ public interface OrderService {
     /**
      * 取消订单 UNPAID → CANCELLED。
      *
-     * <p>乐观锁同 {@link #pay(Long)}。</p>
+     * <p>乐观锁同 {@link #pay(Long, Long)}。</p>
      *
      * @param orderNo 订单号（不可 null）
-     * @throws IllegalArgumentException orderNo 为 null
-     * @throws com.seckill.common.exception.BusinessException 订单不存在 / 状态不合法 / 乐观锁冲突
+     * @param userId  买家用户 ID（不可 null，须与订单 userId 一致）
+     * @throws IllegalArgumentException orderNo / userId 为 null
+     * @throws com.seckill.common.exception.BusinessException 订单不存在 / 无权取消 / 状态不合法 / 乐观锁冲突
      */
-    void cancel(Long orderNo);
+    void cancel(Long orderNo, Long userId);
 
     /**
      * 超时取消订单 UNPAID → CANCELLED。
@@ -79,14 +80,15 @@ public interface OrderService {
     String getOrderStatus(String orderToken);
 
     /**
-     * 查询订单状态 + 订单号（前端轮询用）。
+     * 查询订单状态 + 订单号（前端轮询用，含归属校验）。
      *
      * <p>与 {@link #getOrderStatus(String)} 的区别：同时返回 orderNo，
      * 前端查到后可直接携带 orderNo 跳转支付页。</p>
      *
      * @param orderToken 排队凭证（不可 null/blank）
-     * @return {@link OrderStatusVO}，订单不存在返回 {@code null}
+     * @param userId     当前登录用户 ID（用于校验归属）
+     * @return {@link OrderStatusVO}，订单不存在或不属于该用户返回 {@code null}
      * @throws IllegalArgumentException orderToken 为 null 或 blank
      */
-    OrderStatusVO getOrderStatusVO(String orderToken);
+    OrderStatusVO getOrderStatusVO(String orderToken, Long userId);
 }

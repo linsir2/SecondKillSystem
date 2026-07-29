@@ -8,6 +8,6 @@ import java.util.List;
 public interface UserMessageService {
     void sendMessage(Long userId, MessageType type, String content, Long activityId);
     List<UserMessage> listUserMessages(Long userId, int page, int size);
-    void markAsRead(Long messageId);
+    void markAsRead(Long messageId, Long userId);
     long countUnread(Long userId);
 }

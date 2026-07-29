@@ -7,6 +7,8 @@ import com.seckill.common.security.JwtUtil;
 import com.seckill.common.security.SecurityContext;
 import com.seckill.module.user.model.dto.UserInfo;
 import com.seckill.module.user.service.UserService;
+import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -40,6 +42,10 @@ class JwtAuthFilterTest {
     private JwtUtil jwtUtil;
     @Mock
     private UserService userService;
+    @Mock
+    private StringRedisTemplate redisTemplate;
+    @Mock
+    private SetOperations<String, String> setOps;
 
     @AfterEach
     void tearDown() {
@@ -83,9 +89,11 @@ class JwtAuthFilterTest {
 
         @Test
         void validJwt_setsSecurityContext() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
             Claims claims = mockClaims(1L, "张三", UserRole.user);
             when(jwtUtil.validateAccessToken("valid")).thenReturn(claims);
+            when(redisTemplate.opsForSet()).thenReturn(setOps);
+            when(redisTemplate.opsForSet().isMember(anyString(), anyString())).thenReturn(false);
 
             doFilter(f, "valid", (req, res) -> {
                 CurrentUser user = SecurityContext.get();
@@ -98,7 +106,7 @@ class JwtAuthFilterTest {
 
         @Test
         void expiredJwt_returns401() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
             when(jwtUtil.validateAccessToken(anyString())).thenThrow(new JwtException("expired"));
 
             MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -111,7 +119,7 @@ class JwtAuthFilterTest {
 
         @Test
         void invalidJwt_returns401() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
             when(jwtUtil.validateAccessToken(anyString())).thenThrow(new JwtException("bad signature"));
 
             MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -120,6 +128,38 @@ class JwtAuthFilterTest {
             f.doFilterInternal(req, resp, (r, s) -> {});
 
             assertThat(resp.getStatus()).isEqualTo(401);
+        }
+
+        @Test
+        void bannedUser_returns403() throws Exception {
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
+            Claims claims = mockClaims(1L, "张三", UserRole.user);
+            when(jwtUtil.validateAccessToken("ban")).thenReturn(claims);
+            when(redisTemplate.opsForSet()).thenReturn(setOps);
+            when(redisTemplate.opsForSet().isMember(anyString(), anyString())).thenReturn(true);
+
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            MockHttpServletRequest req = new MockHttpServletRequest();
+            req.addHeader("Authorization", "Bearer ban");
+            f.doFilterInternal(req, resp, (r, s) -> {});
+
+            assertThat(resp.getStatus()).isEqualTo(403);
+        }
+
+        @Test
+        void blacklistedAccessToken_returns403() throws Exception {
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
+            Claims claims = mockClaims(1L, "张三", UserRole.user);
+            when(jwtUtil.validateAccessToken("revoked")).thenReturn(claims);
+            when(redisTemplate.hasKey(anyString())).thenReturn(true);
+
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            MockHttpServletRequest req = new MockHttpServletRequest();
+            req.addHeader("Authorization", "Bearer revoked");
+            f.doFilterInternal(req, resp, (r, s) -> {});
+
+            assertThat(resp.getStatus()).isEqualTo(403);
+            assertThat(resp.getContentAsString()).contains("token已被撤销");
         }
     }
 
@@ -132,7 +172,7 @@ class JwtAuthFilterTest {
 
         @Test
         void noHeader_passesThrough() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
 
             doFilter(f, null, (req, res) ->
                     assertThat(SecurityContext.get()).isNull());
@@ -140,7 +180,7 @@ class JwtAuthFilterTest {
 
         @Test
         void noHeader_withDevFallbackDisabled_passesThrough() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
 
             doFilter(f, null, (req, res) ->
                     assertThat(SecurityContext.get()).isNull());
@@ -156,7 +196,7 @@ class JwtAuthFilterTest {
 
         @Test
         void validXUserId_setsContext() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
             UserInfo info = new UserInfo(1L, "商家A", "a@shop.com",
                     UserRole.merchant, BanStatus.normal);
             when(userService.getUserInfo(1L)).thenReturn(info);
@@ -172,7 +212,7 @@ class JwtAuthFilterTest {
 
         @Test
         void noHeader_skips() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
 
             doFilterWithXUserId(f, null, (req, res) ->
                     assertThat(SecurityContext.get()).isNull());
@@ -180,7 +220,7 @@ class JwtAuthFilterTest {
 
         @Test
         void emptyHeader_skips() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
 
             doFilterWithXUserId(f, "", (req, res) ->
                     assertThat(SecurityContext.get()).isNull());
@@ -188,7 +228,7 @@ class JwtAuthFilterTest {
 
         @Test
         void nonNumericHeader_skips() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
 
             doFilterWithXUserId(f, "abc", (req, res) ->
                     assertThat(SecurityContext.get()).isNull());
@@ -196,7 +236,7 @@ class JwtAuthFilterTest {
 
         @Test
         void userNotFound_skips() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
             when(userService.getUserInfo(999L)).thenReturn(null);
 
             doFilterWithXUserId(f, "999", (req, res) ->
@@ -205,7 +245,7 @@ class JwtAuthFilterTest {
 
         @Test
         void userWithNullRole_skips() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, true);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, true);
             UserInfo noRole = new UserInfo(3L, "norole", "n@test.com",
                     null, BanStatus.normal);
             when(userService.getUserInfo(3L)).thenReturn(noRole);
@@ -224,9 +264,11 @@ class JwtAuthFilterTest {
 
         @Test
         void contextClearedAfterJwtChainCompletes() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
             Claims claims = mockClaims(1L, "张三", UserRole.user);
             when(jwtUtil.validateAccessToken("t")).thenReturn(claims);
+            when(redisTemplate.opsForSet()).thenReturn(setOps);
+            when(redisTemplate.opsForSet().isMember(anyString(), anyString())).thenReturn(false);
 
             doFilter(f, "t", (req, res) ->
                     assertThat(SecurityContext.get()).isNotNull());
@@ -235,7 +277,7 @@ class JwtAuthFilterTest {
 
         @Test
         void contextCleared_evenWhenChainThrows() {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
             Claims claims = mockClaims(1L, "张三", UserRole.user);
             when(jwtUtil.validateAccessToken("t")).thenReturn(claims);
 
@@ -248,7 +290,7 @@ class JwtAuthFilterTest {
 
         @Test
         void contextUnchangedWhenNoAuth() throws Exception {
-            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, false);
+            JwtAuthFilter f = new JwtAuthFilter(jwtUtil, userService, redisTemplate, false);
 
             doFilter(f, null, (req, res) ->
                     assertThat(SecurityContext.get()).isNull());

@@ -572,7 +572,7 @@ class OrderServiceImplTest {
             finally { latch.countDown(); }
         }).start();
         new Thread(() -> {
-            try { orderService.cancel(ORDER_NO); results.add("cancel_ok"); }
+            try { orderService.cancel(ORDER_NO, USER_A); results.add("cancel_ok"); }
             catch (BusinessException e) { results.add("cancel:" + e.getMessage()); }
             finally { latch.countDown(); }
         }).start();
@@ -588,9 +588,24 @@ class OrderServiceImplTest {
     // ========================================================================
 
     @Test
-    @DisplayName("C1 orderNo null -> IAE")
-    void cancelNullOrderNo() {
-        assertIAE(() -> orderService.cancel(null), "orderNo");
+    @DisplayName("C1 orderNo null / userId null / 都 null -> IAE")
+    void cancelNullArgs() {
+        assertIAE(() -> orderService.cancel(null, USER_A), "orderNo");
+        assertIAE(() -> orderService.cancel(ORDER_NO, null), "userId");
+        assertIAE(() -> orderService.cancel(null, null), "orderNo");
+    }
+
+    @Test
+    @DisplayName("C1.5 userId 与订单不匹配 -> BusinessException, update/event 未调用")
+    void cancelUserIdMismatch() {
+        var o = orderWithStatus(OrderStatus.UNPAID);
+        o.setUserId(99999L); // 另一个用户
+        when(orderMapper.selectById(ORDER_NO)).thenReturn(o);
+
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
+        assertTrue(ex.getMessage().contains("无权取消"));
+        verify(orderMapper, never()).update(any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -599,13 +614,21 @@ class OrderServiceImplTest {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.UNPAID));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(1);
 
-        orderService.cancel(ORDER_NO);
+        orderService.cancel(ORDER_NO, USER_A);
 
         var captor = ArgumentCaptor.forClass(SeckillOrder.class);
         verify(orderMapper).update(captor.capture(), any());
         assertEquals(OrderStatus.CANCELLED, captor.getValue().getStatus());
         assertNotNull(captor.getValue().getCancelTime());
-        verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
+        var eventCaptor = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        var evt = eventCaptor.getValue();
+        assertEquals(ORDER_NO, evt.orderNo());
+        assertEquals(ORDER_TOKEN, evt.orderToken());
+        assertEquals(ACTIVITY_ID, evt.activityId());
+        assertEquals(GOODS_ID, evt.seckillGoodsId());
+        assertEquals(USER_A, evt.userId());
+        assertEquals(2, evt.buyCount());
     }
 
     @Test
@@ -613,7 +636,7 @@ class OrderServiceImplTest {
     void cancelOrderNotFound() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(null);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("不存在"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -624,7 +647,7 @@ class OrderServiceImplTest {
     void cancelAlreadyPaid() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.PAID));
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("只能取消待支付订单"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -635,7 +658,7 @@ class OrderServiceImplTest {
     void cancelAlreadyCancelled() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(orderWithStatus(OrderStatus.CANCELLED));
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("只能取消待支付订单"));
         verify(orderMapper, never()).update(any(), any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -649,7 +672,7 @@ class OrderServiceImplTest {
                 .thenReturn(orderWithStatus(OrderStatus.PAID));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("已支付"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(eventPublisher, never()).publishEvent(any());
@@ -663,7 +686,7 @@ class OrderServiceImplTest {
                 .thenReturn(orderWithStatus(OrderStatus.CANCELLED));
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("已取消"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(eventPublisher, never()).publishEvent(any());
@@ -677,7 +700,7 @@ class OrderServiceImplTest {
                 .thenReturn(null);
         when(orderMapper.update(any(SeckillOrder.class), any())).thenReturn(0);
 
-        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO));
+        var ex = assertThrows(BusinessException.class, () -> orderService.cancel(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("不存在"));
         verify(orderMapper, times(2)).selectById(ORDER_NO);
         verify(eventPublisher, never()).publishEvent(any());
@@ -702,7 +725,7 @@ class OrderServiceImplTest {
 
         for (int i = 0; i < 2; i++) {
             new Thread(() -> {
-                try { orderService.cancel(ORDER_NO); results.add("success"); }
+                try { orderService.cancel(ORDER_NO, USER_A); results.add("success"); }
                 catch (BusinessException e) { results.add(e.getMessage()); }
                 finally { latch.countDown(); }
             }).start();
@@ -722,6 +745,40 @@ class OrderServiceImplTest {
     @DisplayName("S1 orderToken null -> IAE")
     void statusNullToken() {
         assertIAE(() -> orderService.getOrderStatus(null), "orderToken");
+    }
+
+    // ========================================================================
+    // 十一-B、状态查询 VO（归属校验）
+    // ========================================================================
+
+    @Test
+    @DisplayName("VO1 orderToken null -> IAE")
+    void statusVONullToken() {
+        assertIAE(() -> orderService.getOrderStatusVO(null, USER_A), "orderToken");
+    }
+
+    @Test
+    @DisplayName("VO2 不存在 -> null")
+    void statusVONotFound() {
+        when(orderMapper.selectOne(any())).thenReturn(null);
+        assertNull(orderService.getOrderStatusVO(ORDER_TOKEN, USER_A));
+    }
+
+    @Test
+    @DisplayName("VO3 属于当前用户 -> OrderStatusVO")
+    void statusVOOwned() {
+        when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.UNPAID));
+        var vo = orderService.getOrderStatusVO(ORDER_TOKEN, USER_A);
+        assertNotNull(vo);
+        assertEquals("UNPAID", vo.status());
+        assertEquals(ORDER_NO, vo.orderNo());
+    }
+
+    @Test
+    @DisplayName("VO4 不属于当前用户 -> null")
+    void statusVONotOwned() {
+        when(orderMapper.selectOne(any())).thenReturn(orderWithStatus(OrderStatus.UNPAID));
+        assertNull(orderService.getOrderStatusVO(ORDER_TOKEN, 99999L));
     }
 
     @Test

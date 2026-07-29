@@ -63,4 +63,22 @@ class MessageTemplatesTest {
         String result = MessageTemplates.userBanned();
         assertThat(result).contains("封禁");
     }
+
+    @Test
+    void userUnbanned_returnsStaticMessage() {
+        String result = MessageTemplates.userUnbanned();
+        assertThat(result).contains("解封");
+    }
+
+    @Test
+    void userWelcome_happyPath() {
+        String result = MessageTemplates.userWelcome("user@test.com");
+        assertThat(result).isEqualTo("欢迎注册秒杀系统！您已使用邮箱 user@test.com 成功注册。祝您购物愉快！");
+    }
+
+    @Test
+    void userWelcome_nullEmail_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.userWelcome(null));
+    }
 }

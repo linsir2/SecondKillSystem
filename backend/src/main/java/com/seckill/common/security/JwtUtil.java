@@ -10,8 +10,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HexFormat;
 
 /**
  * JWT 工具 —— 签发/校验/解析 access token 和 refresh token。
@@ -135,5 +139,22 @@ public class JwtUtil {
 
     public String getUserName(Claims claims) {
         return claims.get(CLAIM_USERNAME, String.class);
+    }
+
+    // ====================================================================
+    // 工具
+    // ====================================================================
+
+    /**
+     * Compute SHA-256 hex digest of a string.
+     */
+    public static String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 }

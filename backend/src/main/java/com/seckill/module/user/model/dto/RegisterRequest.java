@@ -20,6 +20,8 @@ public record RegisterRequest(
         UserRole role
 ) {
     public UserRole resolveRole() {
+        // 注册只能选 user 或 merchant，禁止自选 admin（防止越权提权）
+        if (role == UserRole.admin) return UserRole.user;
         return role != null ? role : UserRole.user;
     }
 }

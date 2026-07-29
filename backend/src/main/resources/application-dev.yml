@@ -10,7 +10,11 @@ rocketmq:
   name-server: localhost:9876
 
 jwt:
+  secret: MzI4MjdhZjM2NTg5MGFmYjM2NTg5MGFmYjM2NTg5MGFmYjM2NTg5MA
   dev-auth-fallback: true
+
+cors:
+  allowed-origins: "*"
 
 logging:
   level:

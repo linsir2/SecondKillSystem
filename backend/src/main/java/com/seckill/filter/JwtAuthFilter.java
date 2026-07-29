@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,16 +39,20 @@ import java.util.List;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
+    private static final String BLACKLIST_KEY = "seckill:blacklist";
 
     private final JwtUtil jwtUtil;
     private final UserService userService;
+    private final StringRedisTemplate redisTemplate;
     private final boolean devAuthFallback;
 
     public JwtAuthFilter(JwtUtil jwtUtil,
                          UserService userService,
+                         StringRedisTemplate redisTemplate,
                          @Value("${jwt.dev-auth-fallback:false}") boolean devAuthFallback) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+        this.redisTemplate = redisTemplate;
         this.devAuthFallback = devAuthFallback;
     }
 
@@ -60,7 +65,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String authHeader = request.getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
-                if (authenticateByJwt(token)) {
+                Long userId = authenticateByJwt(token);
+                if (userId != null) {
+                    // Token 撤销检查
+                    if (isAccessTokenBlacklisted(token)) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":403,\"message\":\"token已被撤销\"}");
+                        return;
+                    }
+                    // 封禁检查（覆盖全部认证路径）
+                    if (isBlacklisted(userId)) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":403,\"message\":\"用户已被封禁\"}");
+                        return;
+                    }
                     chain.doFilter(request, response);
                     return;
                 }
@@ -88,9 +108,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     /**
      * 通过 JWT 认证。
      *
-     * @return true 认证成功，false token 无效
+     * @return userId 认证成功，null token 无效
      */
-    private boolean authenticateByJwt(String token) {
+    private Long authenticateByJwt(String token) {
         try {
             Claims claims = jwtUtil.validateAccessToken(token);
             Long userId = jwtUtil.getUserId(claims);
@@ -98,10 +118,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String role = jwtUtil.getRole(claims).name();
 
             setSecurityContexts(userId, userName, role);
-            return true;
+            return userId;
         } catch (Exception e) {
             log.debug("JWT validation failed: {}", e.getMessage());
-            return false;
+            return null;
         }
     }
 
@@ -130,5 +150,33 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         // 自定义上下文（兼容旧代码）
         SecurityContext.set(new CurrentUser(userId, userName, com.seckill.common.constant.UserRole.valueOf(role)));
+    }
+
+    /**
+     * 检查用户是否在 Redis 黑名单中。
+     * <p>异常降级：Redis 不可用时视为不在黑名单，不阻塞认证流程。</p>
+     */
+    private boolean isBlacklisted(Long userId) {
+        try {
+            return Boolean.TRUE.equals(
+                    redisTemplate.opsForSet().isMember(BLACKLIST_KEY, String.valueOf(userId)));
+        } catch (Exception e) {
+            log.debug("Blacklist check failed for user {}: {}", userId, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 检查 access token 是否已被撤销（logout 时加入黑名单）。
+     * <p>异常降级：Redis 不可用时视为未撤销，不阻塞认证流程。</p>
+     */
+    private boolean isAccessTokenBlacklisted(String token) {
+        try {
+            return Boolean.TRUE.equals(
+                    redisTemplate.hasKey("seckill:abl:" + JwtUtil.sha256Hex(token)));
+        } catch (Exception e) {
+            log.debug("Access token blacklist check failed: {}", e.getMessage());
+            return false;
+        }
     }
 }
