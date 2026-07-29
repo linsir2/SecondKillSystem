@@ -2,8 +2,8 @@ package com.seckill.module.activity.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.seckill.common.constant.BanStatus;
 import com.seckill.common.exception.BusinessException;
+import com.seckill.common.result.PageVO;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
@@ -15,10 +15,9 @@ import com.seckill.module.activity.model.entity.SeckillGoods;
 import com.seckill.module.activity.model.enums.ActivityStatus;
 import com.seckill.module.activity.model.vo.ActivityVO;
 import com.seckill.module.activity.model.vo.SeckillGoodsVO;
+import com.seckill.module.gateway.service.BlacklistLoader;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
-import com.seckill.module.user.mapper.SysUserMapper;
-import com.seckill.module.user.model.entity.SysUser;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -52,7 +52,7 @@ public class ActivityService {
     private final GoodsService goodsService;
     private final ApplicationEventPublisher eventPublisher;
     private final StringRedisTemplate redisTemplate;
-    private final SysUserMapper sysUserMapper;
+    private final BlacklistLoader blacklistLoader;
 
     // ========================================================================
     // 创建草稿
@@ -381,8 +381,6 @@ public class ActivityService {
     // 预热（T-10 分钟定时任务触发）
     // ========================================================================
 
-    private static final String BLACKLIST_KEY = "seckill:blacklist";
-
     /**
      * 预热活动数据到 Redis：库存 key + 限购 key + 黑名单。
      * <p>幂等，可重复调用。活动状态不变（仍为 preheating）。</p>
@@ -398,13 +396,8 @@ public class ActivityService {
             redisTemplate.opsForValue().set(limitKey, String.valueOf(sg.getLimitNum()));
         }
 
-        // ---- 黑名单预热 ----
-        List<SysUser> banned = sysUserMapper.selectList(
-                new LambdaQueryWrapper<SysUser>().eq(SysUser::getBanStatus, BanStatus.banned));
-        redisTemplate.delete(BLACKLIST_KEY);
-        for (SysUser user : banned) {
-            redisTemplate.opsForSet().add(BLACKLIST_KEY, String.valueOf(user.getUserId()));
-        }
+        // ---- 黑名单预热（全量刷新） ----
+        blacklistLoader.load();
     }
 
     // ========================================================================
@@ -503,5 +496,75 @@ public class ActivityService {
 
     private static String redisKey(String prefix, Long activityId, Long seckillGoodsId) {
         return "seckill:" + prefix + ":" + activityId + ":" + seckillGoodsId;
+    }
+
+    // ========================================================================
+    // 查询
+    // ========================================================================
+
+    /**
+     * 获取活动详情（含秒杀商品列表）。
+     *
+     * @param activityId 活动 ID
+     * @return 活动详情
+     * @throws BusinessException 活动不存在
+     */
+    public ActivityVO getActivityDetail(Long activityId) {
+        Activity activity = activityMapper.selectById(activityId);
+        if (activity == null) {
+            throw new BusinessException("活动不存在");
+        }
+        List<SeckillGoods> sgList = seckillGoodsMapper.selectList(
+                new LambdaQueryWrapper<SeckillGoods>().eq(SeckillGoods::getActivityId, activityId));
+        List<SeckillGoodsVO> goodsVOs = sgList.stream()
+                .map(sg -> new SeckillGoodsVO(
+                        sg.getSeckillGoodsId(), sg.getGoodsId(), null,
+                        sg.getSeckillPrice(), sg.getStock(), sg.getLimitNum()))
+                .toList();
+        return buildVO(activity, goodsVOs);
+    }
+
+    /**
+     * 商家查询自己的活动列表（按创建时间倒序）。
+     */
+    public PageVO<ActivityVO> listMerchantActivities(Long merchantId, int page, int pageSize) {
+        Page<Activity> mpPage = new Page<>(page, pageSize);
+        Page<Activity> result = activityMapper.selectPage(mpPage,
+                new LambdaQueryWrapper<Activity>()
+                        .eq(Activity::getMerchantId, merchantId)
+                        .orderByDesc(Activity::getCreatedAt));
+        return toPageVO(result);
+    }
+
+    /**
+     * 管理员查询全部活动列表（按创建时间倒序）。
+     */
+    public PageVO<ActivityVO> listAllActivities(int page, int pageSize) {
+        Page<Activity> mpPage = new Page<>(page, pageSize);
+        Page<Activity> result = activityMapper.selectPage(mpPage,
+                new LambdaQueryWrapper<Activity>()
+                        .orderByDesc(Activity::getCreatedAt));
+        return toPageVO(result);
+    }
+
+    /**
+     * 普通用户查询可见活动（preheating / running / ended，按创建时间倒序）。
+     */
+    public PageVO<ActivityVO> listActiveActivities(int page, int pageSize) {
+        Page<Activity> mpPage = new Page<>(page, pageSize);
+        Page<Activity> result = activityMapper.selectPage(mpPage,
+                new LambdaQueryWrapper<Activity>()
+                        .in(Activity::getStatus, ActivityStatus.preheating,
+                                ActivityStatus.running, ActivityStatus.ended)
+                        .orderByDesc(Activity::getCreatedAt));
+        return toPageVO(result);
+    }
+
+    private PageVO<ActivityVO> toPageVO(Page<Activity> mpPage) {
+        List<ActivityVO> vos = mpPage.getRecords().stream()
+                .map(a -> buildVO(a, List.of()))
+                .toList();
+        return new PageVO<>(vos, mpPage.getTotal(),
+                (int) mpPage.getCurrent(), (int) mpPage.getSize());
     }
 }

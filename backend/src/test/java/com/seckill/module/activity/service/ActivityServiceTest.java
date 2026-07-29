@@ -1,7 +1,7 @@
 package com.seckill.module.activity.service;
 
-import com.seckill.common.constant.BanStatus;
 import com.seckill.common.exception.BusinessException;
+import com.seckill.common.result.PageVO;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
@@ -12,10 +12,10 @@ import com.seckill.module.activity.model.entity.Activity;
 import com.seckill.module.activity.model.entity.SeckillGoods;
 import com.seckill.module.activity.model.enums.ActivityStatus;
 import com.seckill.module.activity.model.vo.ActivityVO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.seckill.module.gateway.service.BlacklistLoader;
 import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.service.GoodsService;
-import com.seckill.module.user.mapper.SysUserMapper;
-import com.seckill.module.user.model.entity.SysUser;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
@@ -67,7 +67,7 @@ class ActivityServiceTest {
     @Mock
     private SetOperations<String, String> setOps;
     @Mock
-    private SysUserMapper sysUserMapper;
+    private BlacklistLoader blacklistLoader;
 
     @InjectMocks
     private ActivityService activityService;
@@ -828,10 +828,9 @@ class ActivityServiceTest {
         private final Long activityId = 10L;
 
         @Test
-        @DisplayName("快乐路径：SET stock/limit + DEL+SADD blacklist")
+        @DisplayName("快乐路径：SET stock/limit + 调 BlacklistLoader 刷新黑名单")
         void happyPath() {
             when(redisTemplate.opsForValue()).thenReturn(valueOps);
-            when(redisTemplate.opsForSet()).thenReturn(setOps);
 
             SeckillGoods sg = new SeckillGoods();
             sg.setSeckillGoodsId(100L);
@@ -839,35 +838,22 @@ class ActivityServiceTest {
             sg.setLimitNum(1);
             when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg));
 
-            SysUser banned = new SysUser();
-            banned.setUserId(999L);
-            when(sysUserMapper.selectList(any())).thenReturn(List.of(banned));
-
             activityService.preheatActivity(activityId);
 
-            // 库存预热
             verify(valueOps).set("seckill:stock:" + activityId + ":100", "50");
             verify(valueOps).set("seckill:limit:" + activityId + ":100", "1");
-            // 黑名单预热
-            verify(redisTemplate).delete("seckill:blacklist");
-            verify(setOps).add("seckill:blacklist", "999");
+            verify(blacklistLoader).load();
         }
 
         @Test
-        @DisplayName("无秒杀商品 → 不写 stock key，只做黑名单预热")
+        @DisplayName("无秒杀商品 → 不写 stock key，只调 BlacklistLoader")
         void emptyGoods() {
-            when(redisTemplate.opsForSet()).thenReturn(setOps);
             when(seckillGoodsMapper.selectList(any())).thenReturn(List.of());
-
-            SysUser banned = new SysUser();
-            banned.setUserId(999L);
-            when(sysUserMapper.selectList(any())).thenReturn(List.of(banned));
 
             activityService.preheatActivity(activityId);
 
             verify(valueOps, never()).set(anyString(), anyString());
-            verify(redisTemplate).delete("seckill:blacklist");
-            verify(setOps).add("seckill:blacklist", "999");
+            verify(blacklistLoader).load();
         }
     }
 
@@ -1236,6 +1222,272 @@ class ActivityServiceTest {
 
             verify(goodsService, never()).restoreStock(anyLong(), anyInt());
             verify(redisTemplate).delete("seckill:pending:30");
+        }
+    }
+
+    // ========================================================================
+    // 4. 活动查询
+    // ========================================================================
+
+    @Nested
+    @DisplayName("活动查询")
+    class ActivityQuery {
+
+        private final Long qMerchantId = 1L;
+        private final Long qActivityId = 10L;
+
+        private Activity qActivity(Long id, Long mId, ActivityStatus status) {
+            Activity a = new Activity();
+            a.setActivityId(id);
+            a.setMerchantId(mId);
+            a.setActivityName("测试活动");
+            a.setStatus(status);
+            a.setStartTime(LocalDateTime.now().plusDays(1));
+            a.setEndTime(LocalDateTime.now().plusDays(2));
+            a.setCreatedAt(LocalDateTime.now());
+            return a;
+        }
+
+        // ================================================================
+        // getActivityDetail
+        // ================================================================
+
+        @Nested
+        @DisplayName("getActivityDetail")
+        class GetActivityDetail {
+
+            @Test
+            @DisplayName("D1 正常 → 含 seckillGoodsList")
+            void happyPath() {
+                Activity activity = qActivity(qActivityId, qMerchantId, ActivityStatus.running);
+                when(activityMapper.selectById(qActivityId)).thenReturn(activity);
+
+                SeckillGoods sg = seckillGoods(100L, 200L, new BigDecimal("9.90"), 50, 1);
+                when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg));
+
+                ActivityVO vo = activityService.getActivityDetail(qActivityId);
+
+                assertThat(vo.getActivityId()).isEqualTo(qActivityId);
+                assertThat(vo.getStatus()).isEqualTo("running");
+                assertThat(vo.getSeckillGoodsList()).hasSize(1);
+                assertThat(vo.getSeckillGoodsList().get(0).getSeckillGoodsId()).isEqualTo(100L);
+            }
+
+            @Test
+            @DisplayName("D2 活动不存在 → BusinessException")
+            void notFound() {
+                when(activityMapper.selectById(qActivityId)).thenReturn(null);
+
+                assertThatThrownBy(() -> activityService.getActivityDetail(qActivityId))
+                        .isInstanceOf(BusinessException.class)
+                        .hasMessageContaining("不存在");
+            }
+
+            @Test
+            @DisplayName("D3 无秒杀商品 → seckillGoodsList=[]")
+            void noGoods() {
+                Activity activity = qActivity(qActivityId, qMerchantId, ActivityStatus.draft);
+                when(activityMapper.selectById(qActivityId)).thenReturn(activity);
+                when(seckillGoodsMapper.selectList(any())).thenReturn(List.of());
+
+                ActivityVO vo = activityService.getActivityDetail(qActivityId);
+
+                assertThat(vo.getSeckillGoodsList()).isEmpty();
+            }
+
+            @Test
+            @DisplayName("D4 多件秒杀商品 → 全部返回")
+            void multipleGoods() {
+                Activity activity = qActivity(qActivityId, qMerchantId, ActivityStatus.preheating);
+                when(activityMapper.selectById(qActivityId)).thenReturn(activity);
+
+                SeckillGoods sg1 = seckillGoods(100L, 200L, new BigDecimal("9.90"), 50, 1);
+                SeckillGoods sg2 = seckillGoods(101L, 201L, new BigDecimal("19.90"), 30, 2);
+                when(seckillGoodsMapper.selectList(any())).thenReturn(List.of(sg1, sg2));
+
+                ActivityVO vo = activityService.getActivityDetail(qActivityId);
+
+                assertThat(vo.getSeckillGoodsList()).hasSize(2);
+            }
+        }
+
+        // ================================================================
+        // listMerchantActivities
+        // ================================================================
+
+        @Nested
+        @DisplayName("listMerchantActivities")
+        class ListMerchantActivities {
+
+            @Test
+            @DisplayName("M1 3条数据 page=1 → 返回3条 total=3")
+            void happyPath() {
+                List<Activity> activities = List.of(
+                        qActivity(1L, qMerchantId, ActivityStatus.draft),
+                        qActivity(2L, qMerchantId, ActivityStatus.pending),
+                        qActivity(3L, qMerchantId, ActivityStatus.running));
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(activities);
+                mpPage.setTotal(3);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listMerchantActivities(qMerchantId, 1, 10);
+
+                assertThat(result.getRecords()).hasSize(3);
+                assertThat(result.getTotal()).isEqualTo(3);
+                assertThat(result.getPage()).isEqualTo(1);
+                assertThat(result.getPageSize()).isEqualTo(10);
+                assertThat(result.getRecords().get(0).getActivityId()).isEqualTo(1L);
+                assertThat(result.getRecords().get(0).getStatus()).isEqualTo("draft");
+                assertThat(result.getRecords().get(1).getStatus()).isEqualTo("pending");
+                assertThat(result.getRecords().get(2).getStatus()).isEqualTo("running");
+            }
+
+            @Test
+            @DisplayName("M2 空结果 → records=[] total=0")
+            void emptyResult() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of());
+                mpPage.setTotal(0);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listMerchantActivities(qMerchantId, 1, 10);
+
+                assertThat(result.getRecords()).isEmpty();
+                assertThat(result.getTotal()).isZero();
+            }
+
+            @Test
+            @DisplayName("M3 wrapper 含 merchant_id 和 created_at 排序")
+            void wrapperConditions() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of());
+                mpPage.setTotal(0);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                activityService.listMerchantActivities(qMerchantId, 1, 10);
+
+                @SuppressWarnings("unchecked")
+                var wrapperCaptor = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+                verify(activityMapper).selectPage(any(Page.class), wrapperCaptor.capture());
+                String sql = wrapperCaptor.getValue().getCustomSqlSegment();
+                assertThat(sql).containsIgnoringCase("merchant_id")
+                        .containsIgnoringCase("created_at");
+            }
+
+            @Test
+            @DisplayName("M4 分页参数透传 page=2 pageSize=5")
+            void pageSizePassing() {
+                Page<Activity> mpPage = new Page<>(2, 5);
+                mpPage.setRecords(List.of(qActivity(6L, qMerchantId, ActivityStatus.draft)));
+                mpPage.setTotal(6);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                activityService.listMerchantActivities(qMerchantId, 2, 5);
+
+                @SuppressWarnings("unchecked")
+                var pageCaptor = ArgumentCaptor.forClass(Page.class);
+                verify(activityMapper).selectPage(pageCaptor.capture(), any());
+                assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(2);
+                assertThat(pageCaptor.getValue().getSize()).isEqualTo(5);
+            }
+        }
+
+        // ================================================================
+        // listAllActivities
+        // ================================================================
+
+        @Nested
+        @DisplayName("listAllActivities")
+        class ListAllActivities {
+
+            @Test
+            @DisplayName("A1 管理员查看全部 → 所有状态")
+            void happyPath() {
+                Activity a1 = qActivity(1L, 1L, ActivityStatus.draft);
+                Activity a2 = qActivity(2L, 2L, ActivityStatus.ended);
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of(a1, a2));
+                mpPage.setTotal(2);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listAllActivities(1, 10);
+
+                assertThat(result.getRecords()).hasSize(2);
+                assertThat(result.getTotal()).isEqualTo(2);
+            }
+
+            @Test
+            @DisplayName("A2 空结果 → records=[] total=0")
+            void emptyResult() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of());
+                mpPage.setTotal(0);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listAllActivities(1, 10);
+
+                assertThat(result.getRecords()).isEmpty();
+                assertThat(result.getTotal()).isZero();
+            }
+        }
+
+        // ================================================================
+        // listActiveActivities
+        // ================================================================
+
+        @Nested
+        @DisplayName("listActiveActivities")
+        class ListActiveActivities {
+
+            @Test
+            @DisplayName("U1 只返回 preheating/running/ended")
+            void onlyActiveStatuses() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of(
+                        qActivity(1L, 1L, ActivityStatus.preheating),
+                        qActivity(2L, 1L, ActivityStatus.running),
+                        qActivity(3L, 1L, ActivityStatus.ended)));
+                mpPage.setTotal(3);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listActiveActivities(1, 10);
+
+                assertThat(result.getRecords()).hasSize(3);
+            }
+
+            @Test
+            @DisplayName("U2 无符合状态的活动 → records=[] total=0")
+            void emptyResult() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of());
+                mpPage.setTotal(0);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                PageVO<ActivityVO> result = activityService.listActiveActivities(1, 10);
+
+                assertThat(result.getRecords()).isEmpty();
+            }
+
+            @Test
+            @DisplayName("U3 wrapper 限 preheating/running/ended，不含 draft/pending")
+            void wrapperStatusFilter() {
+                Page<Activity> mpPage = new Page<>(1, 10);
+                mpPage.setRecords(List.of());
+                mpPage.setTotal(0);
+                when(activityMapper.selectPage(any(Page.class), any())).thenReturn(mpPage);
+
+                activityService.listActiveActivities(1, 10);
+
+                @SuppressWarnings("unchecked")
+                var wrapperCaptor = ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+                verify(activityMapper).selectPage(any(Page.class), wrapperCaptor.capture());
+                String sql = wrapperCaptor.getValue().getCustomSqlSegment();
+                // 参数化为 ?，不包含具体枚举名，检查 column name + IN 关键字
+                assertThat(sql).containsIgnoringCase("status").contains("IN");
+                // 不该含其他状态的 column 引用
+                assertThat(sql).doesNotContain("draft").doesNotContain("pending");
+            }
         }
     }
 
