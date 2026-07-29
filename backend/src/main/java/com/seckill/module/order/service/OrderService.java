@@ -1,5 +1,6 @@
 package com.seckill.module.order.service;
 
+import com.seckill.module.order.model.vo.OrderStatusVO;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
 
 /**
@@ -76,4 +77,16 @@ public interface OrderService {
      * @throws IllegalArgumentException orderToken 为 null 或 blank
      */
     String getOrderStatus(String orderToken);
+
+    /**
+     * 查询订单状态 + 订单号（前端轮询用）。
+     *
+     * <p>与 {@link #getOrderStatus(String)} 的区别：同时返回 orderNo，
+     * 前端查到后可直接携带 orderNo 跳转支付页。</p>
+     *
+     * @param orderToken 排队凭证（不可 null/blank）
+     * @return {@link OrderStatusVO}，订单不存在返回 {@code null}
+     * @throws IllegalArgumentException orderToken 为 null 或 blank
+     */
+    OrderStatusVO getOrderStatusVO(String orderToken);
 }

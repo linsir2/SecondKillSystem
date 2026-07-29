@@ -14,6 +14,7 @@ import com.seckill.module.order.model.entity.MessageLog;
 import com.seckill.module.order.model.entity.SeckillOrder;
 import com.seckill.module.order.model.enums.OrderStatus;
 import com.seckill.module.order.model.enums.SendStatus;
+import com.seckill.module.order.model.vo.OrderStatusVO;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
@@ -240,5 +241,18 @@ public class OrderServiceImpl implements OrderService {
                         .eq("order_token", orderToken)
                         .select("status"));
         return order != null ? order.getStatus().name() : null;
+    }
+
+    @Override
+    public OrderStatusVO getOrderStatusVO(String orderToken) {
+        if (orderToken == null || orderToken.isBlank())
+            throw new IllegalArgumentException("orderToken must not be blank");
+
+        SeckillOrder order = orderMapper.selectOne(
+                new QueryWrapper<SeckillOrder>()
+                        .eq("order_token", orderToken)
+                        .select("order_no", "status"));
+        if (order == null) return null;
+        return new OrderStatusVO(order.getStatus().name(), order.getOrderNo());
     }
 }

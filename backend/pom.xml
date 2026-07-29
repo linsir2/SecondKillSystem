@@ -95,6 +95,13 @@
             <version>${rocketmq.version}</version>
         </dependency>
 
+        <!-- RocketMQ Admin API (DefaultMQAdminExt) for consumer group init -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-tools</artifactId>
+            <version>5.3.0</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
