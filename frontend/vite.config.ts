@@ -9,6 +9,7 @@ export default defineConfig({
       '/api': 'http://localhost:8080',
     },
   },
+  // @ts-expect-error vitest plugin type augmentation
   test: {
     environment: 'jsdom',
     setupFiles: './src/__tests__/setup.ts',

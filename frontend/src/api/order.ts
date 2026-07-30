@@ -5,6 +5,6 @@ export async function getOrderStatus(token: string): Promise<OrderStatusVO> {
   return get<OrderStatusVO>(`/order/status?token=${token}`);
 }
 
-export async function cancelOrder(orderNo: number): Promise<null> {
+export async function cancelOrder(orderNo: string): Promise<null> {
   return post<null>('/order/cancel', { orderNo });
 }

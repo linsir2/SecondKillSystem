@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { post, get } from '../utils/request';
 import * as token from '../utils/token';
 
@@ -131,7 +131,7 @@ describe('utils / request', () => {
       }),
     });
 
-    const err = await post('/test').catch((e) => e);
+    const err = await post('/test').catch((e: unknown) => e) as { code: number; message: string; errors: string[] };
     expect(err.code).toBe(400);
     expect(err.message).toBe('参数错误');
     expect(err.errors).toEqual(['email 格式不正确']);

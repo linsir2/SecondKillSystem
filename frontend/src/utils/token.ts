@@ -37,7 +37,7 @@ export function removeTokens(): void {
 }
 
 export interface StoredUserInfo {
-  userId: number;
+  userId: string;
   userName: string;
   role: string;
 }

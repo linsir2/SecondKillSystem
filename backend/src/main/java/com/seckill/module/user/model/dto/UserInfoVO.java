@@ -2,6 +2,7 @@ package com.seckill.module.user.model.dto;
 
 import com.seckill.common.constant.BanStatus;
 import com.seckill.common.constant.UserRole;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "当前用户信息")
 public record UserInfoVO(
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
         @Schema(description = "用户 ID") Long userId,
         @Schema(description = "用户名") String userName,
         @Schema(description = "邮箱") String email,

@@ -3,15 +3,14 @@ package com.seckill.module.stock.service;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
-import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.ZSetOperations;
-import java.lang.reflect.Field;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,6 +34,7 @@ class SeckillStockServiceMetaTest {
     private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
     private final ZSetOperations<String, String> zsetOps = mock(ZSetOperations.class);
     private final ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
     private SeckillStockService service;
 
@@ -49,7 +49,7 @@ class SeckillStockServiceMetaTest {
                 .thenReturn(1L);
         when(redisTemplate.execute(any(), any(), anyString(), anyString(), anyString()))
                 .thenReturn(1L);
-        service = new SeckillStockService(redisTemplate);
+        service = new SeckillStockService(redisTemplate, eventPublisher);
     }
 
     // ================================================================
@@ -86,15 +86,11 @@ class SeckillStockServiceMetaTest {
     }
 
     @Test
-    @DisplayName("M3 deduct MQ 同步异常 → compensate + DEL meta")
-    void deductMqFailCleansUpMeta() throws Exception {
-        // 注入 rocketMQTemplate mock → syncSend 抛出同步异常
-        var mqMock = mock(RocketMQTemplate.class);
-        doThrow(new RuntimeException("Broker unreachable"))
-                .when(mqMock).syncSend(anyString(), any(SeckillDeductedEvent.class));
-        Field f = SeckillStockService.class.getDeclaredField("rocketMQTemplate");
-        f.setAccessible(true);
-        f.set(service, mqMock);
+    @DisplayName("M3 deduct 事件发布同步异常 → compensate + DEL meta")
+    void deductEventPublishFailCleansUpMeta() {
+        // 事件发布抛出同步异常
+        doThrow(new RuntimeException("Event bus unavailable"))
+                .when(eventPublisher).publishEvent(any(SeckillDeductedEvent.class));
 
         assertThrows(BusinessException.class,
                 () -> service.deduct(1L, 10L, 100L, 2));
