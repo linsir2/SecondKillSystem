@@ -81,9 +81,9 @@ public class PendingOrphanScanner {
     void doScan(long nowMillis) {
         Set<String> pendingKeys;
         try {
-            pendingKeys = redisTemplate.keys(PENDING_KEY_PREFIX + "*");
+            pendingKeys = redisTemplate.keys(PENDING_KEY_PREFIX + "[0-9]*");
         } catch (Exception e) {
-            log.error("PendingOrphanScanner: failed to scan KEYS {}", PENDING_KEY_PREFIX + "*", e);
+            log.error("PendingOrphanScanner: failed to scan KEYS {}", PENDING_KEY_PREFIX + "[0-9]*", e);
             return;
         }
 

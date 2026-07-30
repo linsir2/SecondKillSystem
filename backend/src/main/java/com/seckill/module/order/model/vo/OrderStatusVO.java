@@ -1,5 +1,6 @@
 package com.seckill.module.order.model.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -11,5 +12,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "订单状态查询结果")
 public record OrderStatusVO(
         @Schema(description = "订单状态（UNPAID/PAID/CANCELLED，未查到为 null）") String status,
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
         @Schema(description = "订单号（未查到为 null）") Long orderNo
 ) {}

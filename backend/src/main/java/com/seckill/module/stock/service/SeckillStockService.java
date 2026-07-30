@@ -6,6 +6,7 @@ import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -30,12 +31,15 @@ public class SeckillStockService {
     private final StringRedisTemplate redisTemplate;
     private final DefaultRedisScript<Long> deductScript;
     private final DefaultRedisScript<Long> compensateScript;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired(required = false)
     private RocketMQTemplate rocketMQTemplate;
 
-    public SeckillStockService(StringRedisTemplate redisTemplate) {
+    public SeckillStockService(StringRedisTemplate redisTemplate,
+                               ApplicationEventPublisher eventPublisher) {
         this.redisTemplate = redisTemplate;
+        this.eventPublisher = eventPublisher;
 
         this.deductScript = new DefaultRedisScript<>();
         this.deductScript.setLocation(new ClassPathResource("lua/seckill_deduct.lua"));
@@ -93,18 +97,20 @@ public class SeckillStockService {
                 userId + ":" + seckillGoodsId + ":" + buyCount,
                 Duration.ofMinutes(15));
 
-        // ---- 3. 同步发送 MQ 通知订单服务（无 rocketMQTemplate 时静默跳过） ----
+        // ---- 3. 通知订单服务创建订单 ----
+        SeckillDeductedEvent event = new SeckillDeductedEvent(orderToken, userId, activityId, seckillGoodsId, buyCount);
         if (rocketMQTemplate != null) {
             try {
-                rocketMQTemplate.syncSend(
-                        SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED,
-                        new SeckillDeductedEvent(orderToken, userId, activityId, seckillGoodsId, buyCount));
+                rocketMQTemplate.syncSend(SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED, event);
             } catch (Exception e) {
                 // 发送失败（超时/异常），立即补偿
                 compensate(activityId, seckillGoodsId, userId, buyCount, orderToken,
                         stockKey, usersKey, pendingKey);
                 throw new BusinessException("系统繁忙，请重试");
             }
+        } else {
+            // Local / 无 MQ 环境：通过 Spring 事件同步触发订单创建（仍保持业务解耦）
+            eventPublisher.publishEvent(event);
         }
 
         return SeckillDeductResult.success(orderToken, buyCount);

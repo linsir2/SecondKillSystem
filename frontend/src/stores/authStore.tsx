@@ -20,7 +20,7 @@ import { getMe as getMeApi } from '../api/user';
 import type { UserRole, BanStatus, LoginRequest, RegisterRequest, LoginVO, UserInfoVO } from '../types';
 
 interface UserInfo {
-  userId: number;
+  userId: string;
   userName: string;
   role: UserRole;
   email?: string;
@@ -31,6 +31,7 @@ interface AuthContextType {
   user: UserInfo | null;
   accessToken: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (data: LoginRequest) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
@@ -42,6 +43,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // 初始化：从 localStorage 恢复登录态
   useEffect(() => {
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: storedUser.role as UserRole,
       });
     }
+    setIsLoading(false);
   }, []);
 
   const handleLoginResult = useCallback((result: LoginVO) => {
@@ -119,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         accessToken,
         isAuthenticated: !!user && !!accessToken,
+        isLoading,
         login,
         register,
         logout,

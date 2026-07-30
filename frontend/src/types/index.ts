@@ -4,7 +4,7 @@ export type BanStatus = 'NORMAL' | 'BANNED';
 export interface LoginVO {
   accessToken: string;
   refreshToken: string;
-  userId: number;
+  userId: string;
   userName: string;
   role: UserRole;
 }
@@ -22,7 +22,7 @@ export interface LoginRequest {
 }
 
 export interface UserInfoVO {
-  userId: number;
+  userId: string;
   userName: string;
   email: string;
   role: UserRole;
@@ -126,7 +126,7 @@ export interface SeckillResponse {
 
 export interface OrderStatusVO {
   status: string | null;
-  orderNo: number | null;
+  orderNo: string | null;
 }
 
 /* ─── Payment ─── */

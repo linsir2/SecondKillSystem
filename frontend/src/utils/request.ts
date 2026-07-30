@@ -5,13 +5,13 @@ const BASE_URL = '/api/v1';
 // ── 错误类型 ──────────────────────────────────────────────
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public code: number,
-    public errors?: string[],
-  ) {
+  code: number;
+  errors?: string[];
+  constructor(message: string, code: number, errors?: string[]) {
     super(message);
     this.name = 'ApiError';
+    this.code = code;
+    this.errors = errors;
   }
 }
 

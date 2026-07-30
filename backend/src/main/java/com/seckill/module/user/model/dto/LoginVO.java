@@ -1,6 +1,7 @@
 package com.seckill.module.user.model.dto;
 
 import com.seckill.common.constant.UserRole;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -16,6 +17,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record LoginVO(
         @Schema(description = "24h 有效的 access token") String accessToken,
         @Schema(description = "7d 有效的 refresh token") String refreshToken,
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
         @Schema(description = "用户 ID") Long userId,
         @Schema(description = "用户名") String userName,
         @Schema(description = "角色（user/merchant/admin）") UserRole role

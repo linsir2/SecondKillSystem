@@ -5,6 +5,7 @@ import com.seckill.module.order.mapper.MessageLogMapper;
 import com.seckill.module.order.model.dto.OrderTimeoutMessage;
 import com.seckill.module.order.model.entity.MessageLog;
 import com.seckill.module.order.model.enums.SendStatus;
+import com.seckill.module.order.service.OrderService;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,24 +32,24 @@ public class MessageLogScanner {
 
     private final MessageLogMapper messageLogMapper;
     private final RocketMQTemplate rocketMQTemplate;
+    private final OrderService orderService;
     private final ObjectMapper objectMapper;
 
     private static final int BATCH_SIZE = 20;
     private static final long MQ_TIMEOUT_MS = 3000;
+    private static final long TIMEOUT_DELAY_SECONDS = 60;
 
     public MessageLogScanner(MessageLogMapper messageLogMapper,
-                             @Autowired(required = false) RocketMQTemplate rocketMQTemplate) {
+                             @Autowired(required = false) RocketMQTemplate rocketMQTemplate,
+                             OrderService orderService) {
         this.messageLogMapper = messageLogMapper;
         this.rocketMQTemplate = rocketMQTemplate;
+        this.orderService = orderService;
         this.objectMapper = new ObjectMapper();
     }
 
     @Scheduled(fixedRate = 8000)
     public void scanAndSend() {
-        if (rocketMQTemplate == null) {
-            return; // MQ 未配置
-        }
-
         try {
             List<MessageLog> logs = messageLogMapper.selectList(
                     new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<MessageLog>()
@@ -58,10 +59,54 @@ public class MessageLogScanner {
                             .last("LIMIT " + BATCH_SIZE));
 
             for (MessageLog logEntry : logs) {
-                processLog(logEntry);
+                if (rocketMQTemplate == null) {
+                    processLocalTimeout(logEntry);
+                } else {
+                    processLog(logEntry);
+                }
             }
         } catch (Exception e) {
             log.error("scanAndSend failed, will retry next cycle", e);
+        }
+    }
+
+    private void processLocalTimeout(MessageLog logEntry) {
+        try {
+            if (logEntry.getBody() == null || logEntry.getBody().isBlank()) {
+                log.warn("message_log body is null/blank, marking FAIL, msgId={}", logEntry.getMsgId());
+                markFailed(logEntry);
+                return;
+            }
+
+            // 仅处理创建超过超时时间的关单消息
+            if (logEntry.getCreatedAt() == null ||
+                    logEntry.getCreatedAt().plusSeconds(TIMEOUT_DELAY_SECONDS).isAfter(LocalDateTime.now())) {
+                return;
+            }
+
+            OrderTimeoutMessage msg = objectMapper.readValue(logEntry.getBody(), OrderTimeoutMessage.class);
+            orderService.cancelByTimeout(msg.orderToken());
+
+            MessageLog update = new MessageLog();
+            update.setMsgId(logEntry.getMsgId());
+            update.setStatus(SendStatus.SENT);
+            update.setSendTime(LocalDateTime.now());
+            messageLogMapper.updateById(update);
+        } catch (Exception e) {
+            log.error("Local timeout process failed for msgId={}", logEntry.getMsgId(), e);
+            try {
+                int newRetry = logEntry.getRetryCount() == null ? 1 : logEntry.getRetryCount() + 1;
+                MessageLog update = new MessageLog();
+                update.setMsgId(logEntry.getMsgId());
+                update.setRetryCount(newRetry);
+                if (newRetry >= 3) {
+                    update.setStatus(SendStatus.FAIL);
+                    log.warn("message_log exhausted retries, marking FAIL, msgId={}", logEntry.getMsgId());
+                }
+                messageLogMapper.updateById(update);
+            } catch (Exception inner) {
+                log.error("Failed to update retry_count for msgId={}", logEntry.getMsgId(), inner);
+            }
         }
     }
 

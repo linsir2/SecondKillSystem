@@ -4,6 +4,7 @@ import com.seckill.module.order.mapper.MessageLogMapper;
 import com.seckill.module.order.model.dto.OrderTimeoutMessage;
 import com.seckill.module.order.model.entity.MessageLog;
 import com.seckill.module.order.model.enums.SendStatus;
+import com.seckill.module.order.service.OrderService;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,11 +40,14 @@ class MessageLogScannerTest {
     @Mock
     private RocketMQTemplate rocketMQTemplate;
 
+    @Mock
+    private OrderService orderService;
+
     private MessageLogScanner scanner;
 
     @BeforeEach
     void setUp() {
-        scanner = new MessageLogScanner(messageLogMapper, rocketMQTemplate);
+        scanner = new MessageLogScanner(messageLogMapper, rocketMQTemplate, orderService);
     }
 
     // ==================== helpers ====================
@@ -222,13 +226,18 @@ class MessageLogScannerTest {
     }
 
     @Test
-    @DisplayName("F5 MQ 未配置（rocketMQTemplate=null）-> 静默跳过")
+    @DisplayName("F5 MQ 未配置（rocketMQTemplate=null）-> 走本地超时流程")
     void mqNotConfigured() {
-        scanner = new MessageLogScanner(messageLogMapper, null);
+        scanner = new MessageLogScanner(messageLogMapper, null, orderService);
+
+        var old = log(1, SendStatus.INIT, 0);
+        old.setCreatedAt(LocalDateTime.now().minusSeconds(120));
+        when(messageLogMapper.selectList(any())).thenReturn(List.of(old));
 
         scanner.scanAndSend();
 
-        verify(messageLogMapper, never()).selectList(any());
+        verify(messageLogMapper).selectList(any());
+        verify(orderService).cancelByTimeout("token-1");
     }
 
     @Test
