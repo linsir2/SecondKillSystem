@@ -3,7 +3,6 @@ package com.seckill.module.stock.service;
 import com.seckill.common.exception.BusinessException;
 import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
-import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -89,10 +88,10 @@ class SeckillStockServiceMetaTest {
     @Test
     @DisplayName("M3 deduct MQ 同步异常 → compensate + DEL meta")
     void deductMqFailCleansUpMeta() throws Exception {
-        // 注入 rocketMQTemplate mock → asyncSend 抛出同步异常
+        // 注入 rocketMQTemplate mock → syncSend 抛出同步异常
         var mqMock = mock(RocketMQTemplate.class);
         doThrow(new RuntimeException("Broker unreachable"))
-                .when(mqMock).asyncSend(anyString(), any(SeckillDeductedEvent.class), any(SendCallback.class));
+                .when(mqMock).syncSend(anyString(), any(SeckillDeductedEvent.class));
         Field f = SeckillStockService.class.getDeclaredField("rocketMQTemplate");
         f.setAccessible(true);
         f.set(service, mqMock);

@@ -1,6 +1,5 @@
 package com.seckill.module.payment.service;
 
-import com.seckill.module.payment.model.dto.PayRequest;
 import com.seckill.module.payment.model.dto.PayResponse;
 
 /**
@@ -14,9 +13,10 @@ public interface PaymentService {
     /**
      * 处理支付请求。
      *
-     * @param request 支付请求（含 orderNo, userId，不可 null）
+     * @param orderNo 订单号
+     * @param userId  买家用户 ID（从 JWT 获取）
      * @return {@link PayResponse#ok()} 成功 / {@link PayResponse#fail(String)} 业务失败
-     * @throws IllegalArgumentException request / orderNo / userId 为 null
+     * @throws IllegalArgumentException orderNo / userId 为 null
      */
-    PayResponse pay(PayRequest request);
+    PayResponse pay(Long orderNo, Long userId);
 }

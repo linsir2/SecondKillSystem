@@ -6,7 +6,6 @@ import com.seckill.module.order.model.entity.SeckillOrder;
 import com.seckill.module.order.model.enums.OrderStatus;
 import com.seckill.module.order.service.OrderService;
 import com.seckill.module.payment.mapper.PaymentMapper;
-import com.seckill.module.payment.model.dto.PayRequest;
 import com.seckill.module.payment.model.dto.PayResponse;
 import com.seckill.module.payment.model.dto.PaymentConfirmedEvent;
 import com.seckill.module.payment.model.entity.Payment;
@@ -71,9 +70,6 @@ class PaymentServiceImplTest {
 
     // ============ helpers ============
 
-    private PayRequest req(Long orderNo, Long userId) {
-        return new PayRequest(orderNo, userId);
-    }
 
     private SeckillOrder paidOrder() {
         var o = new SeckillOrder();
@@ -98,27 +94,20 @@ class PaymentServiceImplTest {
     }
 
     // ================================================================
-    // V — 参数校验 V1-V3
+    // V — 参数校验 V1-V2
     // ================================================================
 
     @Test
-    @DisplayName("V1 request == null -> IAE")
-    void nullRequest() {
-        assertIAE(() -> paymentService.pay(null), "request");
-        verifyNoInteractions(orderService, paymentMapper, orderMapper, eventPublisher);
-    }
-
-    @Test
-    @DisplayName("V2 orderNo == null -> IAE")
+    @DisplayName("V1 orderNo == null -> IAE")
     void nullOrderNo() {
-        assertIAE(() -> paymentService.pay(req(null, USER_A)), "orderNo");
+        assertIAE(() -> paymentService.pay(null, USER_A), "orderNo");
         verifyNoInteractions(orderService, paymentMapper, orderMapper, eventPublisher);
     }
 
     @Test
-    @DisplayName("V3 userId == null -> IAE")
+    @DisplayName("V2 userId == null -> IAE")
     void nullUserId() {
-        assertIAE(() -> paymentService.pay(req(ORDER_NO, null)), "userId");
+        assertIAE(() -> paymentService.pay(ORDER_NO, null), "userId");
         verifyNoInteractions(orderService, paymentMapper, orderMapper, eventPublisher);
     }
 
@@ -131,7 +120,7 @@ class PaymentServiceImplTest {
     void paySuccess() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        PayResponse resp = paymentService.pay(req(ORDER_NO, USER_A));
+        PayResponse resp = paymentService.pay(ORDER_NO, USER_A);
 
         assertTrue(resp.success());
         verify(orderService).pay(ORDER_NO, USER_A);
@@ -148,7 +137,7 @@ class PaymentServiceImplTest {
         doThrow(new DuplicateKeyException("uk_payment_order_no"))
                 .when(paymentMapper).insert((Payment) any());
 
-        PayResponse resp = paymentService.pay(req(ORDER_NO, USER_A));
+        PayResponse resp = paymentService.pay(ORDER_NO, USER_A);
 
         assertTrue(resp.success());
         verify(paymentMapper).insert((Payment) any());
@@ -159,7 +148,7 @@ class PaymentServiceImplTest {
     void payAmountPrecision() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        paymentService.pay(req(ORDER_NO, USER_A));
+        paymentService.pay(ORDER_NO, USER_A);
 
         var p = capturePayment().getValue();
         assertEquals(0, AMOUNT.compareTo(p.getAmount()));
@@ -171,7 +160,7 @@ class PaymentServiceImplTest {
     void payTimeNotNull() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        paymentService.pay(req(ORDER_NO, USER_A));
+        paymentService.pay(ORDER_NO, USER_A);
 
         var p = capturePayment().getValue();
         assertNotNull(p.getPayTime());
@@ -182,7 +171,7 @@ class PaymentServiceImplTest {
     void defaultStatus() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        paymentService.pay(req(ORDER_NO, USER_A));
+        paymentService.pay(ORDER_NO, USER_A);
 
         var p = capturePayment().getValue();
         assertEquals(PaymentStatus.SUCCESS, p.getStatus());
@@ -193,7 +182,7 @@ class PaymentServiceImplTest {
     void eventPublished() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        paymentService.pay(req(ORDER_NO, USER_A));
+        paymentService.pay(ORDER_NO, USER_A);
 
         var evtCaptor = ArgumentCaptor.forClass(PaymentConfirmedEvent.class);
         verify(eventPublisher).publishEvent(evtCaptor.capture());
@@ -215,7 +204,7 @@ class PaymentServiceImplTest {
                 .when(orderService).pay(ORDER_NO, USER_A);
 
         var ex = assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("订单不存在"));
         verifyNoInteractions(paymentMapper, orderMapper, eventPublisher);
     }
@@ -227,7 +216,7 @@ class PaymentServiceImplTest {
                 .when(orderService).pay(ORDER_NO, USER_A);
 
         var ex = assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("无权支付"));
         verifyNoInteractions(paymentMapper, orderMapper, eventPublisher);
     }
@@ -239,7 +228,7 @@ class PaymentServiceImplTest {
                 .when(orderService).pay(ORDER_NO, USER_A);
 
         assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         verifyNoInteractions(paymentMapper, orderMapper, eventPublisher);
     }
 
@@ -250,7 +239,7 @@ class PaymentServiceImplTest {
                 .when(orderService).pay(ORDER_NO, USER_A);
 
         assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         verifyNoInteractions(paymentMapper, orderMapper, eventPublisher);
     }
 
@@ -261,7 +250,7 @@ class PaymentServiceImplTest {
                 .when(orderService).pay(ORDER_NO, USER_A);
 
         assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         verifyNoInteractions(paymentMapper, orderMapper, eventPublisher);
     }
 
@@ -273,7 +262,7 @@ class PaymentServiceImplTest {
                 .when(paymentMapper).insert((Payment) any());
 
         assertThrows(RuntimeException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         // orderService.pay 已被调用
         verify(orderService).pay(ORDER_NO, USER_A);
     }
@@ -298,7 +287,7 @@ class PaymentServiceImplTest {
         for (int i = 0; i < 20; i++) {
             new Thread(() -> {
                 try {
-                    PayResponse r = paymentService.pay(req(ORDER_NO, USER_A));
+                    PayResponse r = paymentService.pay(ORDER_NO, USER_A);
                     results.add(r.success() ? "ok" : "fail");
                 } catch (Exception e) {
                     results.add("err:" + e.getMessage());
@@ -333,7 +322,7 @@ class PaymentServiceImplTest {
             long orderNo = ORDER_NO + i;
             new Thread(() -> {
                 try {
-                    PayResponse r = paymentService.pay(req(orderNo, USER_A));
+                    PayResponse r = paymentService.pay(orderNo, USER_A);
                     if (!r.success()) errors.incrementAndGet();
                 } catch (Exception e) {
                     errors.incrementAndGet();
@@ -353,7 +342,7 @@ class PaymentServiceImplTest {
     void chainedInvocationOrder() {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(paidOrder());
 
-        paymentService.pay(req(ORDER_NO, USER_A));
+        paymentService.pay(ORDER_NO, USER_A);
 
         InOrder inOrder = inOrder(orderService, paymentMapper, eventPublisher);
         inOrder.verify(orderService).pay(ORDER_NO, USER_A);
@@ -367,7 +356,7 @@ class PaymentServiceImplTest {
         when(orderMapper.selectById(ORDER_NO)).thenReturn(null);
 
         var ex = assertThrows(BusinessException.class,
-                () -> paymentService.pay(req(ORDER_NO, USER_A)));
+                () -> paymentService.pay(ORDER_NO, USER_A));
         assertTrue(ex.getMessage().contains("订单不存在"));
         verify(paymentMapper, never()).insert((Payment) any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -382,11 +371,11 @@ class PaymentServiceImplTest {
                 .when(paymentMapper).insert((Payment) any());
 
         // 第一次
-        PayResponse r1 = paymentService.pay(req(ORDER_NO, USER_A));
+        PayResponse r1 = paymentService.pay(ORDER_NO, USER_A);
         assertTrue(r1.success());
 
         // 第二次 (幂等)
-        PayResponse r2 = paymentService.pay(req(ORDER_NO, USER_A));
+        PayResponse r2 = paymentService.pay(ORDER_NO, USER_A);
         assertTrue(r2.success());
 
         verify(paymentMapper, times(2)).insert((Payment) any());

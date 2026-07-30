@@ -9,6 +9,10 @@ export async function register(data: RegisterRequest): Promise<LoginVO> {
   return post<LoginVO>('/auth/register', data);
 }
 
+export async function refresh(refreshToken: string): Promise<LoginVO> {
+  return post<LoginVO>('/auth/refresh', { refreshToken });
+}
+
 export async function logout(refreshToken: string): Promise<void> {
   return post<void>('/auth/logout', { refreshToken });
 }

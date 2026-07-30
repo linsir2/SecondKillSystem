@@ -66,7 +66,7 @@ describe('api / goods', () => {
 
       const err = await getGoodsDetail(1).catch((e) => e);
       expect(err.code).toBe(401);
-      expect(err.message).toBe('未登录');
+      expect(err.message).toMatch(/登录/);
     });
 
     it('goodsId=0 原样发送', async () => {
@@ -214,7 +214,7 @@ describe('api / goods', () => {
 
       const err = await listMerchantGoods().catch((e) => e);
       expect(err.code).toBe(401);
-      expect(err.message).toBe('未登录');
+      expect(err.message).toMatch(/登录/);
     });
 
     it('网络异常 → TypeError', async () => {

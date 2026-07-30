@@ -91,6 +91,7 @@ class SeckillOrderMqIntegrationTest {
 
     @BeforeAll
     void warmupConsumerConnection() {
+        cleanTables();
         insertTestData();
 
         // 发一条预热消息等 consumer 注册完毕

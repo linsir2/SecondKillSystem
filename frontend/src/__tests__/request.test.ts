@@ -93,14 +93,14 @@ describe('utils / request', () => {
 
   /* ─── 攻击场景 ─── */
 
-  it('401 时自动清除 token 并抛 AuthError', async () => {
+  it('401 时尝试刷新 token，刷新失败则清除 token 并抛 AuthError', async () => {
     const spy = vi.spyOn(token, 'removeTokens');
     globalThis.fetch = vi.fn().mockResolvedValue({
       status: 401,
-      json: () => Promise.resolve({ code: 401, message: '未登录' }),
+      json: () => Promise.resolve({ code: 401, message: '登录已过期' }),
     });
 
-    await expect(post('/test')).rejects.toThrow(/未登录/);
+    await expect(post('/test')).rejects.toThrow(/登录/);
     expect(spy).toHaveBeenCalledOnce();
   });
 

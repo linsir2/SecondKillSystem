@@ -4,11 +4,10 @@ import com.seckill.common.exception.BusinessException;
 import com.seckill.config.mq.SeckillProducerConfig;
 import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
-import org.apache.rocketmq.client.producer.SendCallback;
-import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -25,15 +24,13 @@ import static org.mockito.Mockito.*;
  *
  * <pre>
  *   ┌──────────────────────────────────────────────────────────────────────────┐
- *   │ M1 发送调用    成功扣减 → asyncSend 被调用                              │
+ *   │ M1 发送调用    成功扣减 → syncSend 被调用                              │
  *   │ M2 事件字段    事件体字段全对                                            │
- *   │ M3 发送成功    onSuccess → 不补偿                                        │
- *   │ M4 发送失败    onException → 恢复库存 + SREM + ZREM                     │
- *   │ M5 同步异常    asyncSend 同步抛异常 → 补偿 + BusinessException          │
- *   │ M6 补偿后可重买   补偿后同用户重新购买 → 成功                            │
- *   │ M7 重复不发送   重复购买 → asyncSend 只调 1 次（首次）                   │
- *   │ M8 超限购不发送   limit=2 buy=5 → asyncSend 未调用                          │
- *   │ M9 售罄不发送     stock=0 → asyncSend 未调用                                │
+ *   │ M3 发送失败    syncSend 抛异常 → 补偿 + BusinessException                │
+ *   │ M4 补偿后可重买   syncSend 失败补偿后同用户再买 → 成功                   │
+ *   │ M5 重复不发送   重复购买 → syncSend 只调 1 次（首次）                    │
+ *   │ M6 超限购不发送  limit=2 buy=5 → syncSend 未被调用                       │
+ *   │ M7 售罄不发送    stock=0 → syncSend 未被调用                             │
  *   └──────────────────────────────────────────────────────────────────────────┘
  * </pre>
  */
@@ -86,11 +83,11 @@ class SeckillStockServiceMqTest {
     }
 
     // ================================================================
-    // M1: asyncSend 被调用
+    // M1: syncSend 被调用
     // ================================================================
 
     @Test
-    @DisplayName("M1 发送调用: 成功扣减 → asyncSend 被调用，destination 正确")
+    @DisplayName("M1 发送调用: 成功扣减 → syncSend 被调用，destination 正确")
     void shouldSendMqOnSuccess() {
         warmup(10, 5);
 
@@ -98,9 +95,8 @@ class SeckillStockServiceMqTest {
         assertEquals(SeckillDeductResult.CODE_SUCCESS, r.code());
 
         verify(rocketMQTemplate)
-                .asyncSend(eq(SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED),
-                        any(Object.class),
-                        any(SendCallback.class));
+                .syncSend(eq(SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED),
+                        any(Object.class));
     }
 
     // ================================================================
@@ -116,7 +112,7 @@ class SeckillStockServiceMqTest {
         assertNotNull(r.orderToken());
 
         ArgumentCaptor<SeckillDeductedEvent> eventCaptor = ArgumentCaptor.forClass(SeckillDeductedEvent.class);
-        verify(rocketMQTemplate).asyncSend(anyString(), eventCaptor.capture(), any(SendCallback.class));
+        verify(rocketMQTemplate).syncSend(anyString(), eventCaptor.capture());
 
         SeckillDeductedEvent event = eventCaptor.getValue();
         assertEquals(r.orderToken(), event.orderToken());
@@ -127,68 +123,17 @@ class SeckillStockServiceMqTest {
     }
 
     // ================================================================
-    // M3: onSuccess → 不补偿
+    // M3: 发送失败（同步） → 补偿 + BusinessException
     // ================================================================
 
     @Test
-    @DisplayName("M3 发送成功: onSuccess → Redis 状态不变（不补偿）")
-    void shouldNotCompensateOnSuccess() throws Exception {
-        warmup(10, 5);
-
-        SeckillDeductResult r = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
-        assertEquals(SeckillDeductResult.CODE_SUCCESS, r.code());
-
-        // 记录扣减后的 Redis 快照
-        String stockAfter = redisTemplate.opsForValue().get(stockKey);
-        Boolean userInSet = redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A));
-        Double pendingScore = redisTemplate.opsForZSet().score(pendingKey, r.orderToken());
-
-        // 触发 onSuccess 回调
-        ArgumentCaptor<SendCallback> cb = ArgumentCaptor.forClass(SendCallback.class);
-        verify(rocketMQTemplate).asyncSend(anyString(), any(Object.class), cb.capture());
-        cb.getValue().onSuccess(mock(SendResult.class));
-
-        // Redis 状态不变
-        assertEquals(stockAfter, redisTemplate.opsForValue().get(stockKey));
-        assertEquals(userInSet, redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A)));
-        assertEquals(pendingScore, redisTemplate.opsForZSet().score(pendingKey, r.orderToken()));
-    }
-
-    // ================================================================
-    // M4: onException → 补偿
-    // ================================================================
-
-    @Test
-    @DisplayName("M4 发送失败: onException → INCRBY stock + SREM + ZREM")
-    void shouldCompensateOnException() throws Exception {
-        warmup(10, 5);
-
-        SeckillDeductResult r = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
-        assertEquals(SeckillDeductResult.CODE_SUCCESS, r.code());
-
-        // 触发 onException
-        ArgumentCaptor<SendCallback> cb = ArgumentCaptor.forClass(SendCallback.class);
-        verify(rocketMQTemplate).asyncSend(anyString(), any(Object.class), cb.capture());
-        cb.getValue().onException(new RuntimeException("send failed"));
-
-        // Redis 已补偿
-        assertEquals("10", redisTemplate.opsForValue().get(stockKey)); // 恢复
-        assertFalse(redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A))); // SREM
-        assertNull(redisTemplate.opsForZSet().score(pendingKey, r.orderToken())); // ZREM
-    }
-
-    // ================================================================
-    // M5: 同步异常 → 补偿 + BusinessException
-    // ================================================================
-
-    @Test
-    @DisplayName("M5 同步异常: asyncSend 抛异常 → 补偿 + BusinessException")
+    @DisplayName("M3 发送失败: syncSend 抛异常 → 补偿 + BusinessException")
     void shouldCompensateAndThrowOnSyncFailure() {
         warmup(10, 5);
 
         doThrow(new RuntimeException("Broker unavailable"))
                 .when(rocketMQTemplate)
-                .asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+                .syncSend(anyString(), any(Object.class));
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2));
@@ -201,60 +146,65 @@ class SeckillStockServiceMqTest {
     }
 
     // ================================================================
-    // M6: 补偿后可重新购买
+    // M4: 补偿后可重新购买
     // ================================================================
 
     @Test
-    @DisplayName("M6 补偿后重买: onException 补偿后同用户再买 → 成功")
-    void shouldAllowRePurchaseAfterMqCompensation() throws Exception {
+    @DisplayName("M4 补偿后重买: syncSend 失败补偿后同用户再买 → 成功")
+    void shouldAllowRePurchaseAfterMqCompensation() {
         warmup(10, 5);
 
-        // 第 1 次购买 → 模拟 MQ 失败
-        SeckillDeductResult r1 = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
-        assertEquals(SeckillDeductResult.CODE_SUCCESS, r1.code());
+        // 第 1 次购买 → 模拟 MQ 失败（syncSend 抛异常 → 补偿 + BusinessException）
+        doThrow(new RuntimeException("Broker unavailable"))
+                .when(rocketMQTemplate)
+                .syncSend(anyString(), any(Object.class));
 
-        ArgumentCaptor<SendCallback> cb1 = ArgumentCaptor.forClass(SendCallback.class);
-        verify(rocketMQTemplate, times(1)).asyncSend(anyString(), any(Object.class), cb1.capture());
-        cb1.getValue().onException(new RuntimeException("send failed"));
+        assertThrows(BusinessException.class,
+                () -> seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2));
 
-        // 第 2 次购买 → 应成功（补偿后 Redis 已还原）
+        // 补偿已执行：stock 恢复，user 移除
+        assertEquals("10", redisTemplate.opsForValue().get(stockKey));
+        assertFalse(redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A)));
+
+        // 恢复 mock：第 2 次购买允许通过
+        Mockito.reset(rocketMQTemplate);
+
         SeckillDeductResult r2 = seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
         assertEquals(SeckillDeductResult.CODE_SUCCESS, r2.code());
         assertNotNull(r2.orderToken());
-        assertNotEquals(r1.orderToken(), r2.orderToken());
 
         assertEquals("8", redisTemplate.opsForValue().get(stockKey)); // 10-2=8
         assertTrue(redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A))); // 重新 SADD
         assertEquals(1L, redisTemplate.opsForZSet().size(pendingKey)); // 新 token
 
-        // asyncSend 被调了 2 次（首次 + 重买）
-        verify(rocketMQTemplate, times(2)).asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+        // syncSend 被调了 1 次（重买，首次抛异常未调用成功）
+        verify(rocketMQTemplate, times(1)).syncSend(anyString(), any(Object.class));
     }
 
     // ================================================================
-    // M7: 重复购买 → 不调第二次 asyncSend
+    // M5: 重复购买 → 不调第二次 syncSend
     // ================================================================
 
     @Test
-    @DisplayName("M7 重复不发送: A 重复购买 → asyncSend 只调 1 次（首次）")
+    @DisplayName("M5 重复不发送: A 重复购买 → syncSend 只调 1 次（首次）")
     void shouldNotSendMqOnDuplicate() {
         warmup(10, 5);
 
         // 第 1 次
         seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 2);
-        verify(rocketMQTemplate, times(1)).asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+        verify(rocketMQTemplate, times(1)).syncSend(anyString(), any(Object.class));
 
         // 第 2 次 → 重复
         seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 1);
-        verify(rocketMQTemplate, times(1)).asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+        verify(rocketMQTemplate, times(1)).syncSend(anyString(), any(Object.class));
     }
 
     // ================================================================
-    // M8/M9: 拒绝场景 → asyncSend 未被调用
+    // M6/M7: 拒绝场景 → syncSend 未被调用
     // ================================================================
 
     @Test
-    @DisplayName("M8 超限购不发送: limit=2 buy=5 → asyncSend 未被调用")
+    @DisplayName("M6 超限购不发送: limit=2 buy=5 → syncSend 未被调用")
     void shouldNotSendMqOnOverLimit() {
         warmup(10, 2);
         seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_A, 5);
@@ -262,7 +212,7 @@ class SeckillStockServiceMqTest {
     }
 
     @Test
-    @DisplayName("M9 售罄不发送: stock=0 buy=1 → asyncSend 未被调用")
+    @DisplayName("M7 售罄不发送: stock=0 buy=1 → syncSend 未被调用")
     void shouldNotSendMqOnSoldOut() {
         warmup(0, 5);
         seckillStockService.deduct(ACTIVITY_ID, GOODS_ID, USER_B, 1);

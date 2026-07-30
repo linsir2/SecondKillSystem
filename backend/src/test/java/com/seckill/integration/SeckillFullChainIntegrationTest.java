@@ -8,7 +8,6 @@ import com.seckill.common.security.SecurityContext;
 import com.seckill.config.mq.SeckillProducerConfig;
 import com.seckill.module.gateway.model.dto.SeckillRequest;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
-import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +44,7 @@ import static org.mockito.Mockito.*;
  * Phase 1 集成联调测试：从 HTTP POST /api/v1/seckill/execute 到 MQ 消息发送。
  *
  * <p>覆盖全链路：JwtAuthFilter → GatewayCheckFilter → SeckillController
- * → SeckillStockService.deduct() → Redis Lua → MQ asyncSend。
+ * → SeckillStockService.deduct() → Redis Lua → MQ syncSend。
  *
  * <pre>
  * 分层策略：
@@ -524,7 +523,7 @@ class SeckillFullChainIntegrationTest {
     class MqReliability {
 
         @Test
-        @DisplayName("M1 正常发送 → asyncSend 被调用")
+        @DisplayName("M1 正常发送 → syncSend 被调用")
         void mqSentOnSuccess() throws Exception {
             warmup(10, 5);
 
@@ -533,9 +532,8 @@ class SeckillFullChainIntegrationTest {
             assertEquals(200, response.getStatusCode().value());
 
             verify(rocketMQTemplate, times(1))
-                    .asyncSend(eq(SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED),
-                            any(Object.class),
-                            any(SendCallback.class));
+                    .syncSend(eq(SeckillProducerConfig.DESTINATION_STOCK_DEDUCTED),
+                            any(Object.class));
         }
 
         @Test
@@ -550,7 +548,7 @@ class SeckillFullChainIntegrationTest {
 
             ArgumentCaptor<SeckillDeductedEvent> eventCaptor =
                     ArgumentCaptor.forClass(SeckillDeductedEvent.class);
-            verify(rocketMQTemplate).asyncSend(anyString(), eventCaptor.capture(), any(SendCallback.class));
+            verify(rocketMQTemplate).syncSend(anyString(), eventCaptor.capture());
 
             SeckillDeductedEvent event = eventCaptor.getValue();
             assertEquals(orderToken, event.orderToken());
@@ -561,13 +559,13 @@ class SeckillFullChainIntegrationTest {
         }
 
         @Test
-        @DisplayName("M3 asyncSend 同步异常 → 补偿 + 400")
+        @DisplayName("M3 syncSend 异常 → 补偿 + 400")
         void mqSyncException() throws Exception {
             warmup(10, 5);
 
             doThrow(new RuntimeException("Broker unavailable"))
                     .when(rocketMQTemplate)
-                    .asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+                    .syncSend(anyString(), any(Object.class));
 
             ResponseEntity<String> response = post(req(ACTIVITY_ID, GOODS_ID, 2), jwtA);
 
@@ -582,30 +580,6 @@ class SeckillFullChainIntegrationTest {
         }
 
         @Test
-        @DisplayName("M4 onException 回调 → Redis 补偿")
-        void mqCallbackCompensate() throws Exception {
-            warmup(10, 5);
-
-            ResponseEntity<String> response = post(req(ACTIVITY_ID, GOODS_ID, 2), jwtA);
-            assertEquals(200, response.getStatusCode().value());
-
-            // 捕获 SendCallback
-            ArgumentCaptor<SendCallback> cb = ArgumentCaptor.forClass(SendCallback.class);
-            verify(rocketMQTemplate).asyncSend(anyString(), any(Object.class), cb.capture());
-
-            // 模拟发送失败
-            cb.getValue().onException(new RuntimeException("send failed"));
-
-            // Redis 补偿
-            assertEquals("10", redisTemplate.opsForValue().get(stockKey), "stock 应恢复");
-            assertFalse(Boolean.TRUE.equals(
-                    redisTemplate.opsForSet().isMember(usersKey, String.valueOf(USER_A))), "user 应移除");
-
-            // pending 应该有旧 token（订单记录仍保留，SchedulerX 兜底用）
-            assertEquals(0L, redisTemplate.opsForZSet().size(pendingKey), "pending 应清空");
-        }
-
-        @Test
         @DisplayName("M5 补偿后可重买")
         void canReBuyAfterCompensate() throws Exception {
             warmup(10, 5);
@@ -613,7 +587,7 @@ class SeckillFullChainIntegrationTest {
             // 第 1 次 → MQ 失败 → 补偿
             doThrow(new RuntimeException("Broker unavailable"))
                     .when(rocketMQTemplate)
-                    .asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+                    .syncSend(anyString(), any(Object.class));
 
             ResponseEntity<String> r1 = post(req(ACTIVITY_ID, GOODS_ID, 2), jwtA);
             assertEquals(400, r1.getStatusCode().value());
@@ -633,19 +607,19 @@ class SeckillFullChainIntegrationTest {
         }
 
         @Test
-        @DisplayName("M6 重复购买 → asyncSend 只调 1 次")
+        @DisplayName("M5 重复购买 → syncSend 只调 1 次")
         void mqNotCalledOnDuplicate() throws Exception {
             warmup(10, 5);
 
             // 第 1 次 → 成功 → MQ 发送
             post(req(ACTIVITY_ID, GOODS_ID, 2), jwtA);
             verify(rocketMQTemplate, times(1))
-                    .asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+                    .syncSend(anyString(), any(Object.class));
 
             // 第 2 次 → 重复 → MQ 不应再发送
             post(req(ACTIVITY_ID, GOODS_ID, 1), jwtA);
             verify(rocketMQTemplate, times(1))
-                    .asyncSend(anyString(), any(Object.class), any(SendCallback.class));
+                    .syncSend(anyString(), any(Object.class));
         }
     }
 

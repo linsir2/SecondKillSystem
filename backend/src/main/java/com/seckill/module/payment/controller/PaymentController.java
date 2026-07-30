@@ -38,7 +38,6 @@ public class PaymentController {
         if (user == null) {
             throw new BusinessException("未登录");
         }
-        // 使用认证用户 ID，忽略请求体中的 userId —— 防止 A 冒用 B 的 userId 探知订单信息
-        return Result.success(paymentService.pay(new PayRequest(request.orderNo(), user.getUserId())));
+        return Result.success(paymentService.pay(request.orderNo(), user.getUserId()));
     }
 }

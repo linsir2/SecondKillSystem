@@ -57,7 +57,7 @@ describe('api / user', () => {
 
     const err = await getMe().catch((e) => e);
     expect(err.code).toBe(401);
-    expect(err.message).toBe('未登录');
+    expect(err.message).toMatch(/登录/);
   });
 
   it('getMe() 网络异常 → TypeError', async () => {

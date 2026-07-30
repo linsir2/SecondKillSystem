@@ -5,7 +5,6 @@ import com.seckill.module.order.mapper.SeckillOrderMapper;
 import com.seckill.module.order.model.entity.SeckillOrder;
 import com.seckill.module.order.service.OrderService;
 import com.seckill.module.payment.mapper.PaymentMapper;
-import com.seckill.module.payment.model.dto.PayRequest;
 import com.seckill.module.payment.model.dto.PayResponse;
 import com.seckill.module.payment.model.dto.PaymentConfirmedEvent;
 import com.seckill.module.payment.model.entity.Payment;
@@ -43,17 +42,16 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PayResponse pay(PayRequest request) {
+    public PayResponse pay(Long orderNo, Long userId) {
         // ---- 1. 参数校验 ----
-        if (request == null) throw new IllegalArgumentException("request must not be null");
-        if (request.orderNo() == null) throw new IllegalArgumentException("orderNo must not be null");
-        if (request.userId() == null) throw new IllegalArgumentException("userId must not be null");
+        if (orderNo == null) throw new IllegalArgumentException("orderNo must not be null");
+        if (userId == null) throw new IllegalArgumentException("userId must not be null");
 
         // ---- 2. 调用订单服务支付（含归属校验、状态校验、乐观锁） ----
-        orderService.pay(request.orderNo(), request.userId());
+        orderService.pay(orderNo, userId);
 
         // ---- 3. 查询订单获取金额 ----
-        SeckillOrder order = orderMapper.selectById(request.orderNo());
+        SeckillOrder order = orderMapper.selectById(orderNo);
         if (order == null) throw new BusinessException("订单不存在");
 
         // ---- 4. 写入支付流水（幂等） ----
@@ -72,7 +70,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         // ---- 5. 发布领域事件 ----
         eventPublisher.publishEvent(new PaymentConfirmedEvent(
-                request.orderNo(), request.userId(), order.getTotalAmount(), payment.getPayTime()));
+                orderNo, userId, order.getTotalAmount(), payment.getPayTime()));
 
         return PayResponse.ok();
     }
