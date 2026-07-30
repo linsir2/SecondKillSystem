@@ -4,12 +4,14 @@ import com.seckill.module.order.service.OrderService;
 import com.seckill.module.stock.model.dto.SeckillDeductedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
  * 秒杀预扣成功事件监听器 —— 无 RocketMQ 时通过 Spring 事件创建订单。
  */
+@Profile("local")
 @Component
 public class SeckillDeductedEventListener {
 
