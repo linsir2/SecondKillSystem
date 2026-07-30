@@ -19,9 +19,9 @@ import { isMockEnabled } from '../mock/server';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const demoAccounts = [
-  { role: '用户', email: 'user@seckill.com', password: '123456' },
-  { role: '商家', email: 'merchant@seckill.com', password: '123456' },
-  { role: '管理员', email: 'admin@seckill.com', password: '123456' },
+  { role: '用户', email: 'user@seckill.com', password: '12345678' },
+  { role: '商家', email: 'merchant@seckill.com', password: '12345678' },
+  { role: '管理员', email: 'admin@seckill.com', password: '12345678' },
 ];
 
 export default function LoginPage() {

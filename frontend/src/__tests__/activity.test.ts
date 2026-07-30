@@ -28,15 +28,15 @@ describe('api / activity', () => {
 
   const mockActivity = (overrides?: Partial<ActivityVO>) => {
     const activity: ActivityVO = {
-      activityId: 1,
+      activityId: '1',
       activityName: '618秒杀',
-      merchantId: 100,
+      merchantId: '100',
       status: 'running',
       startTime: '2026-07-30T10:00:00',
       endTime: '2026-07-30T12:00:00',
       description: '618大促',
       seckillGoodsList: [
-        { seckillGoodsId: 1, goodsId: 10, goodsName: '手机', seckillPrice: 1999, stock: 100, limitNum: 1 },
+        { seckillGoodsId: '1', goodsId: '10', goodsName: '手机', seckillPrice: 1999, stock: 100, limitNum: 1 },
       ],
       createdAt: '2026-07-01T08:00:00',
       rejectReason: null,
@@ -83,8 +83,8 @@ describe('api / activity', () => {
     it('返回多条活动记录', async () => {
       token.setTokens('t', 'r');
       const records: ActivityVO[] = [
-        { activityId: 1, activityName: '活动A', merchantId: 100, status: 'running', startTime: '', endTime: '', description: '', seckillGoodsList: [], createdAt: '', rejectReason: null },
-        { activityId: 2, activityName: '活动B', merchantId: 100, status: 'preheating', startTime: '', endTime: '', description: '', seckillGoodsList: [], createdAt: '', rejectReason: null },
+        { activityId: '1', activityName: '活动A', merchantId: '100', status: 'running', startTime: '', endTime: '', description: '', seckillGoodsList: [], createdAt: '', rejectReason: null },
+        { activityId: '2', activityName: '活动B', merchantId: '100', status: 'preheating', startTime: '', endTime: '', description: '', seckillGoodsList: [], createdAt: '', rejectReason: null },
       ];
       globalThis.fetch = mockPage({ records, total: 2 });
 
@@ -146,8 +146,9 @@ describe('api / activity', () => {
       token.setTokens('user-token', 'r');
       globalThis.fetch = mockActivity();
 
-      const res = await getActivityDetail(1);
-      expect(res.activityId).toBe(1);
+      const res = await getActivityDetail('1');
+
+      expect(res.activityId).toBe('1');
       expect(res.activityName).toBe('618秒杀');
     });
 
@@ -155,7 +156,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockActivity();
 
-      const res = await getActivityDetail(1);
+      const res = await getActivityDetail('1');
       expect(res.seckillGoodsList).toHaveLength(1);
       expect(res.seckillGoodsList[0].goodsName).toBe('手机');
       expect(res.seckillGoodsList[0].seckillPrice).toBe(1999);
@@ -165,7 +166,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockActivity({ rejectReason: '商品库存不足' });
 
-      const res = await getActivityDetail(1);
+      const res = await getActivityDetail('1');
       expect(res.rejectReason).toBe('商品库存不足');
     });
 
@@ -173,7 +174,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockActivity({ rejectReason: null });
 
-      const res = await getActivityDetail(1);
+      const res = await getActivityDetail('1');
       expect(res.rejectReason).toBeNull();
     });
 
@@ -186,7 +187,7 @@ describe('api / activity', () => {
         json: () => Promise.resolve({ code: 400, message: '活动不存在' }),
       });
 
-      const err = await getActivityDetail(99999).catch(e => e);
+      const err = await getActivityDetail('99999').catch(e => e);
       expect(err.message).toBe('活动不存在');
       expect(err.code).toBe(400);
     });
@@ -197,7 +198,7 @@ describe('api / activity', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await getActivityDetail(1).catch(e => e);
+      const err = await getActivityDetail('1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
@@ -205,7 +206,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(getActivityDetail(1)).rejects.toThrow(TypeError);
+      await expect(getActivityDetail('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -222,7 +223,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockActivity();
 
-      await getActivityDetail(999999999999999);
+      await getActivityDetail('999999999999999');
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/999999999999999', expect.anything());
     });
   });
@@ -235,7 +236,7 @@ describe('api / activity', () => {
       startTime: '2026-07-30T10:00:00',
       endTime: '2026-07-30T12:00:00',
       description: '大促销',
-      seckillGoodsList: [{ goodsId: 1, seckillPrice: 1999, stock: 100, limitNum: 1 }],
+      seckillGoodsList: [{ goodsId: '1', seckillPrice: 1999, stock: 100, limitNum: 1 }],
     };
 
     const mockCreated = (overrides?: Partial<ActivityVO>) =>
@@ -246,14 +247,14 @@ describe('api / activity', () => {
             code: 200,
             message: 'success',
             data: {
-              activityId: 1,
+              activityId: '1',
               activityName: '618秒杀',
-              merchantId: 100,
+              merchantId: '100',
               status: 'draft',
               startTime: '2026-07-30T10:00:00',
               endTime: '2026-07-30T12:00:00',
               description: '大促销',
-              seckillGoodsList: [{ seckillGoodsId: 1, goodsId: 1, goodsName: '手机', seckillPrice: 1999, stock: 100, limitNum: 1 }],
+              seckillGoodsList: [{ seckillGoodsId: '1', goodsId: '1', goodsName: '手机', seckillPrice: 1999, stock: 100, limitNum: 1 }],
               createdAt: '2026-07-01T08:00:00',
               rejectReason: null,
               ...overrides,
@@ -274,7 +275,7 @@ describe('api / activity', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer merchant-token', 'Content-Type': 'application/json' }),
         body: JSON.stringify(validReq),
       });
-      expect(res.activityId).toBe(1);
+      expect(res.activityId).toBe('1');
       expect(res.status).toBe('draft');
     });
 
@@ -350,7 +351,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockCreated();
 
-      const req = { ...validReq, seckillGoodsList: [{ goodsId: 1, seckillPrice: -1, stock: -1, limitNum: -1 }] };
+      const req = { ...validReq, seckillGoodsList: [{ goodsId: '1', seckillPrice: -1, stock: -1, limitNum: -1 }] };
       await createActivity(req);
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/activity',
@@ -370,7 +371,7 @@ describe('api / activity', () => {
             code: 200,
             message: 'success',
             data: {
-              activityId: 1, activityName: '618秒杀', merchantId: 100, status: 'pending',
+              activityId: '1', activityName: '618秒杀', merchantId: '100', status: 'pending',
               startTime: '2026-07-30T10:00:00', endTime: '2026-07-30T12:00:00',
               description: '', seckillGoodsList: [], createdAt: '', rejectReason: null,
             },
@@ -383,21 +384,21 @@ describe('api / activity', () => {
       token.setTokens('merchant-token', 'r');
       globalThis.fetch = mockSubmitted();
 
-      const res = await submitForReview(1);
+      const res = await submitForReview('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/1/submit', {
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer merchant-token' }),
         body: undefined,
       });
-      expect(res.activityId).toBe(1);
+      expect(res.activityId).toBe('1');
     });
 
     it('返回 status="pending"', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockSubmitted();
 
-      const res = await submitForReview(1);
+      const res = await submitForReview('1');
       expect(res.status).toBe('pending');
     });
 
@@ -410,7 +411,7 @@ describe('api / activity', () => {
         json: () => Promise.resolve({ code: 400, message: '活动不存在' }),
       });
 
-      const err = await submitForReview(99999).catch(e => e);
+      const err = await submitForReview('99999').catch(e => e);
       expect(err.code).toBe(400);
     });
 
@@ -419,14 +420,14 @@ describe('api / activity', () => {
         status: 401, json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await submitForReview(1).catch(e => e);
+      const err = await submitForReview('1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
     it('网络异常 → TypeError', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-      await expect(submitForReview(1)).rejects.toThrow(TypeError);
+      await expect(submitForReview('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -443,7 +444,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockSubmitted();
 
-      await submitForReview(999999999999999);
+      await submitForReview('999999999999999');
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/999999999999999/submit', expect.anything());
     });
   });
@@ -458,7 +459,7 @@ describe('api / activity', () => {
           Promise.resolve({
             code: 200, message: 'success',
             data: {
-              activityId: 1, activityName: '618秒杀', merchantId: 100, status: 'preheating',
+              activityId: '1', activityName: '618秒杀', merchantId: '100', status: 'preheating',
               startTime: '2026-07-30T10:00:00', endTime: '2026-07-30T12:00:00',
               description: '', seckillGoodsList: [], createdAt: '', rejectReason: null,
             },
@@ -471,21 +472,21 @@ describe('api / activity', () => {
       token.setTokens('admin-token', 'r');
       globalThis.fetch = mockApproved();
 
-      const res = await approveActivity(1);
+      const res = await approveActivity('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/1/approve', {
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
         body: undefined,
       });
-      expect(res.activityId).toBe(1);
+      expect(res.activityId).toBe('1');
     });
 
     it('返回 status="preheating"', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockApproved();
 
-      const res = await approveActivity(1);
+      const res = await approveActivity('1');
       expect(res.status).toBe('preheating');
     });
 
@@ -497,7 +498,7 @@ describe('api / activity', () => {
         status: 200, json: () => Promise.resolve({ code: 400, message: '活动不存在' }),
       });
 
-      const err = await approveActivity(99999).catch(e => e);
+      const err = await approveActivity('99999').catch(e => e);
       expect(err.code).toBe(400);
     });
 
@@ -506,14 +507,14 @@ describe('api / activity', () => {
         status: 401, json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await approveActivity(1).catch(e => e);
+      const err = await approveActivity('1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
     it('网络异常 → TypeError', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-      await expect(approveActivity(1)).rejects.toThrow(TypeError);
+      await expect(approveActivity('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -530,7 +531,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockApproved();
 
-      await approveActivity(999999999999999);
+      await approveActivity('999999999999999');
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/999999999999999/approve', expect.anything());
     });
   });
@@ -545,7 +546,7 @@ describe('api / activity', () => {
           Promise.resolve({
             code: 200, message: 'success',
             data: {
-              activityId: 1, activityName: '618秒杀', merchantId: 100, status: 'draft',
+              activityId: '1', activityName: '618秒杀', merchantId: '100', status: 'draft',
               startTime: '2026-07-30T10:00:00', endTime: '2026-07-30T12:00:00',
               description: '', seckillGoodsList: [], createdAt: '', rejectReason: reason,
             },
@@ -558,21 +559,21 @@ describe('api / activity', () => {
       token.setTokens('admin-token', 'r');
       globalThis.fetch = mockRejected('商品库存不足');
 
-      const res = await rejectActivity(1, '商品库存不足');
+      const res = await rejectActivity('1', '商品库存不足');
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/1/reject', {
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' }),
         body: JSON.stringify({ reason: '商品库存不足' }),
       });
-      expect(res.activityId).toBe(1);
+      expect(res.activityId).toBe('1');
     });
 
     it('返回 rejectReason 非空', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockRejected('库存不足');
 
-      const res = await rejectActivity(1, '库存不足');
+      const res = await rejectActivity('1', '库存不足');
       expect(res.rejectReason).toBe('库存不足');
       expect(res.status).toBe('draft');
     });
@@ -583,7 +584,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockRejected('');
 
-      await rejectActivity(1, '');
+      await rejectActivity('1', '');
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/activity/1/reject', {
         method: 'POST',
         headers: expect.anything(),
@@ -597,7 +598,7 @@ describe('api / activity', () => {
         status: 200, json: () => Promise.resolve({ code: 400, message: '活动不存在' }),
       });
 
-      const err = await rejectActivity(99999, 'reason').catch(e => e);
+      const err = await rejectActivity('99999', 'reason').catch(e => e);
       expect(err.code).toBe(400);
     });
 
@@ -606,14 +607,14 @@ describe('api / activity', () => {
         status: 401, json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await rejectActivity(1, 'r').catch(e => e);
+      const err = await rejectActivity('1', 'r').catch(e => e);
       expect(err.code).toBe(401);
     });
 
     it('网络异常 → TypeError', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-      await expect(rejectActivity(1, 'r')).rejects.toThrow(TypeError);
+      await expect(rejectActivity('1', 'r')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -622,7 +623,7 @@ describe('api / activity', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockRejected('<script>alert(1)</script>');
 
-      await rejectActivity(1, '<script>alert(1)</script>');
+      await rejectActivity('1', '<script>alert(1)</script>');
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/activity/1/reject',
         expect.objectContaining({ body: expect.stringContaining('<script>alert(1)</script>') }),

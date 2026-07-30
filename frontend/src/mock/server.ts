@@ -26,26 +26,26 @@ interface MockUser {
   role: UserRole; banStatus: BanStatus;
 }
 interface MockGoods {
-  goodsId: number; goodsName: string; price: number; status: number; stock: number; createdAt: string; merchantId: number;
+  goodsId: string; goodsName: string; price: number; status: number; stock: number; createdAt: string; merchantId: string;
 }
 interface MockSeckillGoods {
-  seckillGoodsId: number; goodsId: number; goodsName: string; seckillPrice: number;
-  stock: number; origStock: number; limitNum: number; merchantId: number;
+  seckillGoodsId: string; goodsId: string; goodsName: string; seckillPrice: number;
+  stock: number; origStock: number; limitNum: number; merchantId: string;
 }
 interface MockActivity {
-  activityId: number; activityName: string; merchantId: number; status: string;
+  activityId: string; activityName: string; merchantId: string; status: string;
   startTime: string; endTime: string; description: string; createdAt: string;
   rejectReason: string | null; goods: MockSeckillGoods[];
 }
 interface MockOrder {
-  orderNo: string; orderToken: string; userId: string; activityId: number;
-  seckillGoodsId: number; buyCount: number; totalAmount: number;
+  orderNo: string; orderToken: string; userId: string; activityId: string;
+  seckillGoodsId: string; buyCount: number; totalAmount: number;
   status: 'UNPAID' | 'PAID' | 'CANCELLED' | null; createdAt: string;
   polls: number;
 }
 interface MockMessage {
-  messageId: number; userId: string; type: string; content: string;
-  activityId: number | null; isRead: boolean; createdAt: string;
+  messageId: string; userId: string; type: string; content: string;
+  activityId: string | null; isRead: boolean; createdAt: string;
 }
 
 const now = () => new Date();
@@ -64,50 +64,50 @@ let seqOrderNo = 7000000000000000;
 let seqMsg = 1;
 
 const users: MockUser[] = [
-  { userId: '1001', userName: '张买家', email: 'user@seckill.com', password: '123456', role: 'user', banStatus: 'NORMAL' },
-  { userId: '1002', userName: '极客数码', email: 'merchant@seckill.com', password: '123456', role: 'merchant', banStatus: 'NORMAL' },
-  { userId: '1003', userName: '管理员', email: 'admin@seckill.com', password: '123456', role: 'admin', banStatus: 'NORMAL' },
+  { userId: '1001', userName: '张买家', email: 'user@seckill.com', password: '12345678', role: 'user', banStatus: 'NORMAL' },
+  { userId: '1002', userName: '极客数码', email: 'merchant@seckill.com', password: '12345678', role: 'merchant', banStatus: 'NORMAL' },
+  { userId: '1003', userName: '管理员', email: 'admin@seckill.com', password: '12345678', role: 'admin', banStatus: 'NORMAL' },
 ];
 
 const goods: MockGoods[] = [
-  { goodsId: 5001, goodsName: 'iPhone 16 Pro 256G', price: 8999, status: 1, stock: 500, createdAt: tIso(-86400000 * 9), merchantId: 1002 },
-  { goodsId: 5002, goodsName: 'Sony WH-1000XM5 头戴耳机', price: 2899, status: 1, stock: 300, createdAt: tIso(-86400000 * 7), merchantId: 1002 },
-  { goodsId: 5003, goodsName: '客制化机械键盘', price: 699, status: 1, stock: 1000, createdAt: tIso(-86400000 * 5), merchantId: 1002 },
-  { goodsId: 5004, goodsName: '4K 显示器 27寸', price: 1799, status: 1, stock: 200, createdAt: tIso(-86400000 * 3), merchantId: 1002 },
+  { goodsId: '5001', goodsName: 'iPhone 16 Pro 256G', price: 8999, status: 1, stock: 500, createdAt: tIso(-86400000 * 9), merchantId: '1002' },
+  { goodsId: '5002', goodsName: 'Sony WH-1000XM5 头戴耳机', price: 2899, status: 1, stock: 300, createdAt: tIso(-86400000 * 7), merchantId: '1002' },
+  { goodsId: '5003', goodsName: '客制化机械键盘', price: 699, status: 1, stock: 1000, createdAt: tIso(-86400000 * 5), merchantId: '1002' },
+  { goodsId: '5004', goodsName: '4K 显示器 27寸', price: 1799, status: 1, stock: 200, createdAt: tIso(-86400000 * 3), merchantId: '1002' },
 ];
 
 const mkSg = (g: MockGoods, sp: number, stock: number, limit: number): MockSeckillGoods => ({
-  seckillGoodsId: ++seqSg, goodsId: g.goodsId, goodsName: g.goodsName,
+  seckillGoodsId: String(++seqSg), goodsId: g.goodsId, goodsName: g.goodsName,
   seckillPrice: sp, stock, origStock: stock, limitNum: limit, merchantId: g.merchantId,
 });
 
 const activities: MockActivity[] = [
   {
-    activityId: 101, activityName: '618 数码狂欢夜', merchantId: 1002, status: 'running',
+    activityId: '101', activityName: '618 数码狂欢夜', merchantId: '1002', status: 'running',
     startTime: tIso(-10 * 60000), endTime: tIso(50 * 60000), description: '年度最低价，全场数码爆款限时秒杀，手慢无！',
     createdAt: tIso(-86400000 * 2), rejectReason: null,
     goods: [mkSg(goods[0], 6999, 50, 1), mkSg(goods[1], 1999, 80, 2)],
   },
   {
-    activityId: 102, activityName: '午间限时秒杀', merchantId: 1002, status: 'preheating',
+    activityId: '102', activityName: '午间限时秒杀', merchantId: '1002', status: 'preheating',
     startTime: tIso(2 * 60000), endTime: tIso(32 * 60000), description: '午休时段精选好物，整点开抢。',
     createdAt: tIso(-86400000), rejectReason: null,
     goods: [mkSg(goods[2], 399, 100, 1)],
   },
   {
-    activityId: 103, activityName: '开学季特惠', merchantId: 1002, status: 'ended',
+    activityId: '103', activityName: '开学季特惠', merchantId: '1002', status: 'ended',
     startTime: tIso(-120 * 60000), endTime: tIso(-60 * 60000), description: '开学装备一站式补齐。',
     createdAt: tIso(-86400000 * 4), rejectReason: null,
     goods: [mkSg(goods[1], 2099, 0, 1)],
   },
   {
-    activityId: 104, activityName: '双11 预热专场', merchantId: 1002, status: 'draft',
+    activityId: '104', activityName: '双11 预热专场', merchantId: '1002', status: 'draft',
     startTime: tIso(3 * 86400000), endTime: tIso(3 * 86400000 + 2 * 3600000), description: '双11 筹备中，敬请期待。',
     createdAt: tIso(-86400000 * 1.2), rejectReason: null,
     goods: [mkSg(goods[3], 1299, 150, 1)],
   },
   {
-    activityId: 105, activityName: '夏日清仓甩卖', merchantId: 1002, status: 'pending',
+    activityId: '105', activityName: '夏日清仓甩卖', merchantId: '1002', status: 'pending',
     startTime: tIso(1 * 86400000), endTime: tIso(1 * 86400000 + 3600000), description: '清凉一夏，库存清仓。',
     createdAt: tIso(-3600000 * 5), rejectReason: null,
     goods: [mkSg(goods[2], 299, 60, 2)],
@@ -116,11 +116,11 @@ const activities: MockActivity[] = [
 
 const orders: MockOrder[] = [];
 const messages: MockMessage[] = [
-  { messageId: 1, userId: '1001', type: 'welcome', content: '欢迎来到秒杀系统！立即去活动广场参与抢购吧。', activityId: null, isRead: false, createdAt: tIso(-3600000) },
-  { messageId: 2, userId: '1001', type: 'approval_result', content: '极客数码将于 10 分钟前创办"618 数码狂欢夜"秒杀活动，包含以下商品：iPhone 16 Pro 256G、Sony WH-1000XM5 头戴耳机。', activityId: 101, isRead: false, createdAt: tIso(-9 * 60000) },
-  { messageId: 3, userId: '1002', type: 'welcome', content: '欢迎商家入驻！可前往「创建活动」发布秒杀。', activityId: null, isRead: true, createdAt: tIso(-86400000) },
-  { messageId: 4, userId: '1002', type: 'approval_result', content: '您于早些时候创建的"618 数码狂欢夜"活动已通过审批，将按时开始秒杀。', activityId: 101, isRead: true, createdAt: tIso(-11 * 60000) },
-  { messageId: 5, userId: '1003', type: 'welcome', content: '管理员后台已就绪，可审核活动与管理用户。', activityId: null, isRead: true, createdAt: tIso(-86400000) },
+  { messageId: '1', userId: '1001', type: 'welcome', content: '欢迎来到秒杀系统！立即去活动广场参与抢购吧。', activityId: null, isRead: false, createdAt: tIso(-3600000) },
+  { messageId: '2', userId: '1001', type: 'approval_result', content: '极客数码将于 10 分钟前创办"618 数码狂欢夜"秒杀活动，包含以下商品：iPhone 16 Pro 256G、Sony WH-1000XM5 头戴耳机。', activityId: '101', isRead: false, createdAt: tIso(-9 * 60000) },
+  { messageId: '3', userId: '1002', type: 'welcome', content: '欢迎商家入驻！可前往「创建活动」发布秒杀。', activityId: null, isRead: true, createdAt: tIso(-86400000) },
+  { messageId: '4', userId: '1002', type: 'approval_result', content: '您于早些时候创建的"618 数码狂欢夜"活动已通过审批，将按时开始秒杀。', activityId: '101', isRead: true, createdAt: tIso(-11 * 60000) },
+  { messageId: '5', userId: '1003', type: 'welcome', content: '管理员后台已就绪，可审核活动与管理用户。', activityId: null, isRead: true, createdAt: tIso(-86400000) },
 ];
 
 // token -> userId
@@ -170,10 +170,6 @@ function toMessageVO(m: MockMessage): MessageVO {
   return { messageId: m.messageId, type: m.type, content: m.content, activityId: m.activityId, read: m.isRead, createdAt: m.createdAt };
 }
 
-function uidNum(u: MockUser): number {
-  return Number(u.userId);
-}
-
 /* ------------------------------------------------------------------ */
 /*  路由处理                                                           */
 /* ------------------------------------------------------------------ */
@@ -206,7 +202,7 @@ async function route(req: MockRequest): Promise<MockResponse> {
     if (users.some((x) => x.email === email)) return err(400, '该邮箱已注册');
     const nu: MockUser = { userId: String(++seqUser), userName: un, email, password, role: (role ?? 'user') as UserRole, banStatus: 'NORMAL' };
     users.push(nu);
-    messages.push({ messageId: ++seqMsg, userId: nu.userId, type: 'welcome', content: `欢迎注册秒杀系统，${un}！`, activityId: null, isRead: false, createdAt: isoStr(now()) });
+    messages.push({ messageId: String(++seqMsg), userId: nu.userId, type: 'welcome', content: `欢迎注册秒杀系统，${un}！`, activityId: null, isRead: false, createdAt: isoStr(now()) });
     const at = `mock-at-${nu.userId}-${Date.now()}`; const rt = `mock-rt-${nu.userId}-${Date.now()}`;
     sessions.set(at, nu.userId); sessions.set(rt, nu.userId);
     const vo: LoginVO = { accessToken: at, refreshToken: rt, userId: nu.userId, userName: nu.userName, role: nu.role };
@@ -233,7 +229,7 @@ async function route(req: MockRequest): Promise<MockResponse> {
     const e = needAuth(); if (e) return e;
     const page = Number(q.get('page') ?? 1); const pageSize = Number(q.get('pageSize') ?? 10);
     let list = activities.slice();
-    if (user!.role === 'merchant') list = list.filter((a) => a.merchantId === uidNum(user!));
+    if (user!.role === 'merchant') list = list.filter((a) => a.merchantId === user!.userId);
     else if (user!.role === 'user') list = list.filter((a) => ['preheating', 'running', 'ended'].includes(a.status));
     const total = list.length;
     const records = list.slice((page - 1) * pageSize, page * pageSize).map(toActivityVO);
@@ -244,59 +240,59 @@ async function route(req: MockRequest): Promise<MockResponse> {
     if (user!.role !== 'merchant') return err(403, '仅商家可创建活动');
     const r = body as CreateActivityRequest;
     const a: MockActivity = {
-      activityId: ++seqAct, activityName: r.activityName, merchantId: uidNum(user!), status: 'draft',
+      activityId: String(++seqAct), activityName: r.activityName, merchantId: user!.userId, status: 'draft',
       startTime: r.startTime, endTime: r.endTime, description: r.description ?? '',
       createdAt: isoStr(now()), rejectReason: null,
       goods: (r.seckillGoodsList ?? []).map((it) => {
         const g = goods.find((x) => x.goodsId === it.goodsId);
-        return { seckillGoodsId: ++seqSg, goodsId: it.goodsId, goodsName: g?.goodsName ?? `商品${it.goodsId}`, seckillPrice: it.seckillPrice, stock: it.stock, origStock: it.stock, limitNum: it.limitNum, merchantId: uidNum(user!) };
+        return { seckillGoodsId: String(++seqSg), goodsId: it.goodsId, goodsName: g?.goodsName ?? `商品${it.goodsId}`, seckillPrice: it.seckillPrice, stock: it.stock, origStock: it.stock, limitNum: it.limitNum, merchantId: user!.userId };
       }),
     };
     activities.unshift(a);
     return ok(toActivityVO(a));
   }
-  const actMatch = u.match(/^\/activity\/(\d+)$/);
+  const actMatch = u.match(/^\/activity\/([^/]+)$/);
   if (actMatch && method === 'GET') {
     const e = needAuth(); if (e) return e;
-    const a = activities.find((x) => x.activityId === Number(actMatch[1]));
+    const a = activities.find((x) => x.activityId === actMatch[1]);
     if (!a) return err(400, '活动不存在');
     return ok(toActivityVO(a));
   }
-  const submitMatch = u.match(/^\/activity\/(\d+)\/submit$/);
+  const submitMatch = u.match(/^\/activity\/([^/]+)\/submit$/);
   if (submitMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
-    const a = activities.find((x) => x.activityId === Number(submitMatch[1]));
+    const a = activities.find((x) => x.activityId === submitMatch[1]);
     if (!a) return err(400, '活动不存在');
     if (a.status !== 'draft') return err(400, '仅草稿可提交审核');
     a.status = 'pending';
     return ok(toActivityVO(a));
   }
-  const approveMatch = u.match(/^\/activity\/(\d+)\/approve$/);
+  const approveMatch = u.match(/^\/activity\/([^/]+)\/approve$/);
   if (approveMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'admin') return err(403, '仅管理员可审核活动');
-    const a = activities.find((x) => x.activityId === Number(approveMatch[1]));
+    const a = activities.find((x) => x.activityId === approveMatch[1]);
     if (!a) return err(400, '活动不存在');
     if (a.status !== 'pending') return err(400, '仅待审核活动可通过');
     a.status = 'preheating';
     // 通知商家
-    messages.push({ messageId: ++seqMsg, userId: String(a.merchantId), type: 'approval_result', content: `您创建的"${a.activityName}"活动已通过审批，将按时开始秒杀。`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
+    messages.push({ messageId: String(++seqMsg), userId: a.merchantId, type: 'approval_result', content: `您创建的"${a.activityName}"活动已通过审批，将按时开始秒杀。`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
     // 通知全体用户
     for (const usr of users.filter((x) => x.role === 'user')) {
       const names = a.goods.map((g) => g.goodsName).join('、');
-      messages.push({ messageId: ++seqMsg, userId: usr.userId, type: 'approval_result', content: `${users.find((m) => m.userId === String(a.merchantId))?.userName ?? '商家'}将于${a.startTime}创办"${a.activityName}"秒杀活动，包含以下商品：${names}。`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
+      messages.push({ messageId: String(++seqMsg), userId: usr.userId, type: 'approval_result', content: `${users.find((m) => m.userId === a.merchantId)?.userName ?? '商家'}将于${a.startTime}创办"${a.activityName}"秒杀活动，包含以下商品：${names}。`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
     }
     return ok(toActivityVO(a));
   }
-  const rejectMatch = u.match(/^\/activity\/(\d+)\/reject$/);
+  const rejectMatch = u.match(/^\/activity\/([^/]+)\/reject$/);
   if (rejectMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'admin') return err(403, '仅管理员可驳回活动');
-    const a = activities.find((x) => x.activityId === Number(rejectMatch[1]));
+    const a = activities.find((x) => x.activityId === rejectMatch[1]);
     if (!a) return err(400, '活动不存在');
     const reason = (body as { reason?: string })?.reason ?? '';
     a.status = 'draft'; a.rejectReason = reason;
-    messages.push({ messageId: ++seqMsg, userId: String(a.merchantId), type: 'approval_result', content: `您的活动"${a.activityName}"被驳回。理由：${reason || '无'}`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
+    messages.push({ messageId: String(++seqMsg), userId: a.merchantId, type: 'approval_result', content: `您的活动"${a.activityName}"被驳回。理由：${reason || '无'}`, activityId: a.activityId, isRead: false, createdAt: isoStr(now()) });
     return ok(toActivityVO(a));
   }
 
@@ -304,44 +300,44 @@ async function route(req: MockRequest): Promise<MockResponse> {
   if (u === '/goods' && method === 'GET') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'merchant') return err(403, '仅商家可操作');
-    return ok(goods.filter((g) => g.merchantId === uidNum(user!)).map(toGoodsVO));
+    return ok(goods.filter((g) => g.merchantId === user!.userId).map(toGoodsVO));
   }
   if (u === '/goods' && method === 'POST') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'merchant') return err(403, '仅商家可操作');
     const r = body as CreateGoodsRequest;
-    const g: MockGoods = { goodsId: ++seqGoods, goodsName: r.goodsName, price: r.price, status: 1, stock: r.stock, createdAt: isoStr(now()), merchantId: uidNum(user!) };
+    const g: MockGoods = { goodsId: String(++seqGoods), goodsName: r.goodsName, price: r.price, status: 1, stock: r.stock, createdAt: isoStr(now()), merchantId: user!.userId };
     goods.push(g);
     return ok(toGoodsVO(g));
   }
-  const goodsUpd = u.match(/^\/goods\/(\d+)$/);
+  const goodsUpd = u.match(/^\/goods\/([^/]+)$/);
   if (goodsUpd && method === 'PUT') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'merchant') return err(403, '仅商家可操作');
-    const g = goods.find((x) => x.goodsId === Number(goodsUpd[1]) && x.merchantId === uidNum(user!));
+    const g = goods.find((x) => x.goodsId === goodsUpd[1] && x.merchantId === user!.userId);
     if (!g) return err(400, '商品不存在');
     const r = body as UpdateGoodsRequest;
     g.goodsName = r.goodsName; g.price = r.price; g.stock = r.stock;
     return ok(toGoodsVO(g));
   }
-  const goodsInfo = u.match(/^\/goods\/(\d+)$/);
+  const goodsInfo = u.match(/^\/goods\/([^/]+)$/);
   if (goodsInfo && method === 'GET') {
     const e = needAuth(); if (e) return e;
-    const g = goods.find((x) => x.goodsId === Number(goodsInfo[1]));
+    const g = goods.find((x) => x.goodsId === goodsInfo[1]);
     if (!g) return err(400, '商品不存在');
     return ok({ goodsId: g.goodsId, goodsName: g.goodsName, price: g.price, stock: g.stock });
   }
-  const listMatch = u.match(/^\/goods\/(\d+)\/list$/);
+  const listMatch = u.match(/^\/goods\/([^/]+)\/list$/);
   if (listMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
-    const g = goods.find((x) => x.goodsId === Number(listMatch[1]) && x.merchantId === uidNum(user!));
+    const g = goods.find((x) => x.goodsId === listMatch[1] && x.merchantId === user!.userId);
     if (!g) return err(400, '商品不存在');
     g.status = 1; return ok(toGoodsVO(g));
   }
-  const delistMatch = u.match(/^\/goods\/(\d+)\/delist$/);
+  const delistMatch = u.match(/^\/goods\/([^/]+)\/delist$/);
   if (delistMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
-    const g = goods.find((x) => x.goodsId === Number(delistMatch[1]) && x.merchantId === uidNum(user!));
+    const g = goods.find((x) => x.goodsId === delistMatch[1] && x.merchantId === user!.userId);
     if (!g) return err(400, '商品不存在');
     g.status = 0; return ok(toGoodsVO(g));
   }
@@ -418,7 +414,7 @@ async function route(req: MockRequest): Promise<MockResponse> {
   if (u === '/messages' && method === 'GET') {
     const e = needAuth(); if (e) return e;
     const page = Number(q.get('page') ?? 1); const size = Number(q.get('size') ?? 20);
-    const list = messages.filter((m) => m.userId === user!.userId).sort((a, b) => b.messageId - a.messageId);
+    const list = messages.filter((m) => m.userId === user!.userId).sort((a, b) => b.messageId.localeCompare(a.messageId));
     const records = list.slice((page - 1) * size, page * size).map(toMessageVO);
     return ok(records);
   }
@@ -427,23 +423,23 @@ async function route(req: MockRequest): Promise<MockResponse> {
     const c = messages.filter((m) => m.userId === user!.userId && !m.isRead).length;
     return ok(c);
   }
-  const readMatch = u.match(/^\/messages\/(\d+)\/read$/);
+  const readMatch = u.match(/^\/messages\/([^/]+)\/read$/);
   if (readMatch && method === 'PUT') {
     const e = needAuth(); if (e) return e;
-    const m = messages.find((x) => x.messageId === Number(readMatch[1]) && x.userId === user!.userId);
+    const m = messages.find((x) => x.messageId === readMatch[1] && x.userId === user!.userId);
     if (m) m.isRead = true;
     return ok(null);
   }
 
   // ---- admin ----
-  const banMatch = u.match(/^\/admin\/users\/(\d+)\/(ban|unban)$/);
+  const banMatch = u.match(/^\/admin\/users\/([^/]+)\/(ban|unban)$/);
   if (banMatch && method === 'POST') {
     const e = needAuth(); if (e) return e;
     if (user!.role !== 'admin') return err(403, '仅管理员可操作');
     const target = users.find((x) => x.userId === banMatch[1]);
     if (!target) return err(400, '用户不存在');
     target.banStatus = banMatch[2] === 'ban' ? 'BANNED' : 'NORMAL';
-    messages.push({ messageId: ++seqMsg, userId: target.userId, type: 'ban_info', content: banMatch[2] === 'ban' ? '您的账号已被管理员封禁。' : '您的账号已被解封，恢复正常使用。', activityId: null, isRead: false, createdAt: isoStr(now()) });
+    messages.push({ messageId: String(++seqMsg), userId: target.userId, type: 'ban_info', content: banMatch[2] === 'ban' ? '您的账号已被管理员封禁。' : '您的账号已被解封，恢复正常使用。', activityId: null, isRead: false, createdAt: isoStr(now()) });
     return ok(null);
   }
 
@@ -496,9 +492,9 @@ export function installMockFetch() {
 export function mockInfo() {
   return {
     users: [
-      { email: 'user@seckill.com', password: '123456', role: '用户' },
-      { email: 'merchant@seckill.com', password: '123456', role: '商家' },
-      { email: 'admin@seckill.com', password: '123456', role: '管理员' },
+      { email: 'user@seckill.com', password: '12345678', role: '用户' },
+      { email: 'merchant@seckill.com', password: '12345678', role: '商家' },
+      { email: 'admin@seckill.com', password: '12345678', role: '管理员' },
     ],
   };
 }
