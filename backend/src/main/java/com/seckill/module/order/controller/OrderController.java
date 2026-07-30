@@ -7,6 +7,10 @@ import com.seckill.common.security.SecurityContext;
 import com.seckill.module.order.model.dto.CancelOrderRequest;
 import com.seckill.module.order.model.vo.OrderStatusVO;
 import com.seckill.module.order.service.OrderService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 直到返回非 null 的 {@code status} 和 {@code orderNo}，然后跳转支付页。
  * 支付前可调用 {@code POST /api/v1/order/cancel} 主动取消。</p>
  */
+@Tag(name = "订单管理", description = "订单状态查询、取消订单")
 @RestController
 @RequestMapping("/api/v1/order")
 @PreAuthorize("isAuthenticated()")
@@ -33,8 +38,9 @@ public class OrderController {
         this.orderService = orderService;
     }
 
+    @Operation(summary = "订单状态查询", description = "根据 orderToken 轮询订单状态，返回 status 和 orderNo")
     @GetMapping("/status")
-    public Result<OrderStatusVO> getStatus(@RequestParam("token") String token) {
+    public Result<OrderStatusVO> getStatus(@Parameter(description = "秒杀成功后返回的 orderToken") @RequestParam("token") String token) {
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("token must not be blank");
         }
@@ -46,8 +52,9 @@ public class OrderController {
         return Result.success(vo);
     }
 
+    @Operation(summary = "取消订单", description = "支付前主动取消订单，恢复库存")
     @PostMapping("/cancel")
-    public Result<Void> cancel(@RequestBody CancelOrderRequest request) {
+    public Result<Void> cancel(@Valid @RequestBody CancelOrderRequest request) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");

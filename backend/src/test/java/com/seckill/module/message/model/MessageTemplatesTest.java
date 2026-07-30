@@ -71,6 +71,19 @@ class MessageTemplatesTest {
     }
 
     @Test
+    void merchantRejected_happyPath() {
+        String result = MessageTemplates.merchantRejected("618大促");
+
+        assertThat(result).isEqualTo("您的秒杀活动「618大促」未通过审核，请查看活动详情了解驳回原因。");
+    }
+
+    @Test
+    void merchantRejected_nullName_throws() {
+        assertThrows(NullPointerException.class,
+                () -> MessageTemplates.merchantRejected(null));
+    }
+
+    @Test
     void userWelcome_happyPath() {
         String result = MessageTemplates.userWelcome("user@test.com");
         assertThat(result).isEqualTo("欢迎注册秒杀系统！您已使用邮箱 user@test.com 成功注册。祝您购物愉快！");

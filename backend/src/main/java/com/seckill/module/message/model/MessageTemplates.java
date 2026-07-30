@@ -62,6 +62,16 @@ public final class MessageTemplates {
     }
 
     /**
+     * 驳回通知 → 商家。
+     *
+     * @param activityName 活动名（非 null）
+     */
+    public static String merchantRejected(String activityName) {
+        Objects.requireNonNull(activityName, "activityName must not be null");
+        return "您的秒杀活动「" + activityName + "」未通过审核，请查看活动详情了解驳回原因。";
+    }
+
+    /**
      * 封禁通知。
      */
     public static String userBanned() {

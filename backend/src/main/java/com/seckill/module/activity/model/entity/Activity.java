@@ -28,6 +28,9 @@ public class Activity {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /** 驳回理由（可空）；驳回时写入，重新提交时清空 */
+    private String rejectReason;
+
     // ========================================================================
     // 领域行为
     // ========================================================================
@@ -78,5 +81,19 @@ public class Activity {
             throw new IllegalStateException("当前状态不可结束");
         }
         this.status = ActivityStatus.ended;
+    }
+
+    /**
+     * pending → draft（管理员驳回活动）。
+     *
+     * @param rejectReason 驳回理由（可 null，Service 层处理默认值）
+     * @throws IllegalStateException 当前状态不是 pending
+     */
+    public void reject(String rejectReason) {
+        if (this.status != ActivityStatus.pending) {
+            throw new IllegalStateException("当前状态不可驳回");
+        }
+        this.status = ActivityStatus.draft;
+        this.rejectReason = rejectReason;
     }
 }

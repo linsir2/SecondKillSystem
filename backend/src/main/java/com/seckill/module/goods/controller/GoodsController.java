@@ -10,6 +10,10 @@ import com.seckill.module.goods.model.dto.GoodsInfo;
 import com.seckill.module.goods.model.dto.UpdateGoodsRequest;
 import com.seckill.module.goods.model.vo.GoodsVO;
 import com.seckill.module.goods.service.GoodsService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +32,7 @@ import java.util.List;
  * <p>所有端点需商家角色，商家 ID 从 {@link SecurityContext} 自动注入，
  * 避免商家篡改 path 中的 merchantId 操作他人商品。</p>
  */
+@Tag(name = "商品管理", description = "商家商品 CRUD、上下架")
 @RestController
 @RequestMapping("/api/v1/goods")
 @RequiredArgsConstructor
@@ -36,11 +41,9 @@ public class GoodsController {
 
     private final GoodsService goodsService;
 
-    /**
-     * 商家创建自有商品。
-     */
+    @Operation(summary = "创建商品", description = "商家创建自有商品")
     @PostMapping
-    public Result<GoodsVO> createGoods(@RequestBody CreateGoodsRequest request) {
+    public Result<GoodsVO> createGoods(@Valid @RequestBody CreateGoodsRequest request) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");
@@ -51,12 +54,10 @@ public class GoodsController {
         return Result.success(goodsService.createGoods(user.getUserId(), request));
     }
 
-    /**
-     * 商家更新自有商品信息。
-     */
+    @Operation(summary = "更新商品", description = "商家更新自有商品信息")
     @PutMapping("/{goodsId}")
-    public Result<GoodsVO> updateGoods(@PathVariable Long goodsId,
-                                       @RequestBody UpdateGoodsRequest request) {
+    public Result<GoodsVO> updateGoods(@Parameter(description = "商品ID") @PathVariable Long goodsId,
+                                       @Valid @RequestBody UpdateGoodsRequest request) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");
@@ -67,11 +68,9 @@ public class GoodsController {
         return Result.success(goodsService.updateGoods(user.getUserId(), goodsId, request));
     }
 
-    /**
-     * 商家上架自有商品（幂等）。
-     */
+    @Operation(summary = "上架商品", description = "商家上架自有商品（幂等）")
     @PostMapping("/{goodsId}/list")
-    public Result<GoodsVO> listGoods(@PathVariable Long goodsId) {
+    public Result<GoodsVO> listGoods(@Parameter(description = "商品ID") @PathVariable Long goodsId) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");
@@ -82,11 +81,9 @@ public class GoodsController {
         return Result.success(goodsService.listGoods(user.getUserId(), goodsId));
     }
 
-    /**
-     * 商家下架自有商品（幂等）。
-     */
+    @Operation(summary = "下架商品", description = "商家下架自有商品（幂等）")
     @PostMapping("/{goodsId}/delist")
-    public Result<GoodsVO> delistGoods(@PathVariable Long goodsId) {
+    public Result<GoodsVO> delistGoods(@Parameter(description = "商品ID") @PathVariable Long goodsId) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");
@@ -97,9 +94,7 @@ public class GoodsController {
         return Result.success(goodsService.delistGoods(user.getUserId(), goodsId));
     }
 
-    /**
-     * 商家查看自己的全部商品列表（含已下架）。
-     */
+    @Operation(summary = "商品列表", description = "商家查看自己的全部商品列表（含已下架）")
     @GetMapping
     public Result<List<GoodsVO>> listMerchantGoods() {
         CurrentUser user = SecurityContext.get();
@@ -112,11 +107,9 @@ public class GoodsController {
         return Result.success(goodsService.listMerchantGoods(user.getUserId()));
     }
 
-    /**
-     * 商家查看自有商品详情。
-     */
+    @Operation(summary = "商品详情", description = "商家查看自有商品详情")
     @GetMapping("/{goodsId}")
-    public Result<GoodsInfo> getGoodsInfo(@PathVariable Long goodsId) {
+    public Result<GoodsInfo> getGoodsInfo(@Parameter(description = "商品ID") @PathVariable Long goodsId) {
         CurrentUser user = SecurityContext.get();
         if (user == null) {
             throw new BusinessException("未登录");

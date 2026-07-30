@@ -5,6 +5,7 @@ import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.user.model.entity.SysUser;
 import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
+import com.seckill.module.activity.model.dto.ActivityRejectedEvent;
 import com.seckill.module.activity.model.dto.ActivitySubmittedForReviewEvent;
 import com.seckill.module.activity.model.entity.Activity;
 import com.seckill.module.activity.model.entity.SeckillGoods;
@@ -232,6 +233,31 @@ class MessageEventListenerTest {
         when(sysUserMapper.selectList(any())).thenReturn(List.of());
 
         listener.onActivitySubmittedForReview(new ActivitySubmittedForReviewEvent(activityId, merchantId));
+
+        verify(userMessageService, never()).sendMessage(anyLong(), any(), anyString(), anyLong());
+    }
+
+    // ========================================================================
+    // onActivityRejected
+    // ========================================================================
+
+    @Test
+    void onActivityRejected_sendsMerchantNotification() {
+        Activity activity = anActivity();
+        when(activityMapper.selectById(activityId)).thenReturn(activity);
+
+        listener.onActivityRejected(new ActivityRejectedEvent(activityId, merchantId, "价格不合理"));
+
+        verify(userMessageService).sendMessage(eq(merchantId),
+                eq(com.seckill.module.message.model.enums.MessageType.approval_result),
+                anyString(), eq(activityId));
+    }
+
+    @Test
+    void onActivityRejected_activityNotFound_skips() {
+        when(activityMapper.selectById(activityId)).thenReturn(null);
+
+        listener.onActivityRejected(new ActivityRejectedEvent(activityId, merchantId, "原因"));
 
         verify(userMessageService, never()).sendMessage(anyLong(), any(), anyString(), anyLong());
     }

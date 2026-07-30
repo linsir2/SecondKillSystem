@@ -6,6 +6,7 @@ import com.seckill.common.constant.UserRole;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
+import com.seckill.module.activity.model.dto.ActivityRejectedEvent;
 import com.seckill.module.activity.model.dto.ActivitySubmittedForReviewEvent;
 import com.seckill.module.activity.model.entity.Activity;
 import com.seckill.module.activity.model.entity.SeckillGoods;
@@ -129,6 +130,22 @@ public class MessageEventListener {
     }
 
     /**
+     * 活动驳回 → 商家通知。
+     * <p>不携带具体理由，商家从活动详情页查看。</p>
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 200))
+    public void onActivityRejected(ActivityRejectedEvent event) {
+        Activity activity = activityMapper.selectById(event.activityId());
+        if (activity == null) {
+            log.warn("Activity {} not found, skip rejection notification", event.activityId());
+            return;
+        }
+        String content = MessageTemplates.merchantRejected(activity.getActivityName());
+        userMessageService.sendMessage(event.merchantId(), MessageType.approval_result, content, event.activityId());
+    }
+
+    /**
      * 用户被封禁 → 封禁通知。
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -179,5 +196,10 @@ public class MessageEventListener {
     @Recover
     public void recoverUserUnbanned(Exception e, UserUnbannedEvent event) {
         log.error("User unbanned notification failed after retries, userId={}", event.userId(), e);
+    }
+
+    @Recover
+    public void recoverActivityRejected(Exception e, ActivityRejectedEvent event) {
+        log.error("Activity rejected notification failed after retries, activityId={}", event.activityId(), e);
     }
 }

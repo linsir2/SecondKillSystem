@@ -7,6 +7,7 @@ import com.seckill.common.result.PageVO;
 import com.seckill.module.activity.mapper.ActivityMapper;
 import com.seckill.module.activity.mapper.SeckillGoodsMapper;
 import com.seckill.module.activity.model.dto.ActivityApprovedEvent;
+import com.seckill.module.activity.model.dto.ActivityRejectedEvent;
 import com.seckill.module.activity.model.dto.ActivitySubmittedForReviewEvent;
 import com.seckill.module.activity.model.dto.CreateActivityRequest;
 import com.seckill.module.activity.model.dto.CreateSeckillGoodsItem;
@@ -181,7 +182,8 @@ public class ActivityService {
                 activity.getEndTime(),
                 activity.getDescription(),
                 goodsVOs,
-                activity.getCreatedAt()
+                activity.getCreatedAt(),
+                activity.getRejectReason()
         );
     }
 
@@ -249,6 +251,9 @@ public class ActivityService {
         if (!errors.isEmpty()) {
             throw new BusinessException("部分商品校验未通过", errors);
         }
+
+        // ---- 清除驳回理由，进入新的审核周期 ----
+        activity.setRejectReason(null);
 
         // ---- 实体领域行为 + 乐观锁更新 ----
         try {
@@ -374,6 +379,66 @@ public class ActivityService {
 
         // ---- 组装 VO ----
         List<SeckillGoodsVO> goodsVOs = buildSubmitGoodsVOs(seckillGoodsList, goodsInfos);
+        return buildVO(activity, goodsVOs);
+    }
+
+    // ========================================================================
+    // 活动驳回
+    // ========================================================================
+
+    /**
+     * 管理员驳回秒杀活动（pending → draft）。
+     *
+     * <p>流程：前置校验 → 领域行为 → 乐观锁更新 → 发布事件 → 组装 VO。
+     * 不涉及库存回补（驳回发生在预占库存前）。</p>
+     *
+     * @param activityId 活动 ID
+     * @param reason     驳回理由（null/blank 时使用默认理由）
+     * @return 活动详情（status=draft，rejectReason 已填充）
+     */
+    @Transactional
+    public ActivityVO rejectActivity(Long activityId, String reason) {
+        // ---- 前置校验 ----
+        Activity activity = activityMapper.selectById(activityId);
+        if (activity == null) {
+            throw new BusinessException("活动不存在");
+        }
+
+        // ---- 归一化驳回理由 ----
+        if (reason == null || reason.isBlank()) {
+            reason = "管理员未提供驳回原因";
+        }
+
+        // ---- 实体领域行为 ----
+        try {
+            activity.reject(reason);
+        } catch (IllegalStateException e) {
+            throw new BusinessException(e.getMessage());
+        }
+
+        // ---- 乐观锁更新 ----
+        LambdaUpdateWrapper<Activity> wrapper = new LambdaUpdateWrapper<Activity>()
+                .eq(Activity::getActivityId, activityId)
+                .eq(Activity::getStatus, ActivityStatus.pending);
+        int affected = activityMapper.update(activity, wrapper);
+        if (affected == 0) {
+            throw new BusinessException("驳回失败，请刷新重试");
+        }
+
+        // ---- 领域事件 ----
+        eventPublisher.publishEvent(new ActivityRejectedEvent(activityId,
+                activity.getMerchantId(), reason));
+
+        // ---- 组装 VO ----
+        List<SeckillGoods> sgList = seckillGoodsMapper.selectList(
+                new LambdaQueryWrapper<SeckillGoods>()
+                        .eq(SeckillGoods::getActivityId, activityId));
+        List<SeckillGoodsVO> goodsVOs = sgList.stream()
+                .map(sg -> new SeckillGoodsVO(
+                        sg.getSeckillGoodsId(), sg.getGoodsId(), null,
+                        sg.getSeckillPrice(), sg.getStock(), sg.getLimitNum()))
+                .toList();
+
         return buildVO(activity, goodsVOs);
     }
 

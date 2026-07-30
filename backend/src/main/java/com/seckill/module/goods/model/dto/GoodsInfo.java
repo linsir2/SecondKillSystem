@@ -1,5 +1,6 @@
 package com.seckill.module.goods.model.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -12,9 +13,14 @@ import java.math.BigDecimal;
  */
 @Data
 @AllArgsConstructor
+@Schema(description = "商品基本信息（内部上下文调用）")
 public class GoodsInfo {
+    @Schema(description = "商品 ID")
     private Long goodsId;
+    @Schema(description = "商品名称")
     private String goodsName;
+    @Schema(description = "价格")
     private BigDecimal price;
+    @Schema(description = "库存")
     private Integer stock;
 }

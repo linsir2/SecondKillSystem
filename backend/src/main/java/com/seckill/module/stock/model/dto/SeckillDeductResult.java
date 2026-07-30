@@ -1,5 +1,7 @@
 package com.seckill.module.stock.model.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 秒杀库存预扣结果值对象。
  *
@@ -7,7 +9,12 @@ package com.seckill.module.stock.model.dto;
  * @param orderToken 排队凭证（仅成功时有值）
  * @param buyCount   实际购买数量（仅成功时有值）
  */
-public record SeckillDeductResult(int code, String orderToken, int buyCount) {
+@Schema(description = "秒杀库存预扣结果（内部使用）")
+public record SeckillDeductResult(
+        @Schema(description = "结果码: 1 成功 / -1 重复 / -2 售罄 / -3 超限") int code,
+        @Schema(description = "排队凭证（仅成功时有值）") String orderToken,
+        @Schema(description = "实际购买数量（仅成功时有值）") int buyCount
+) {
 
     public static final int CODE_SUCCESS = 1;
     public static final int CODE_DUPLICATE = -1;

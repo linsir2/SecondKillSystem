@@ -7,6 +7,9 @@ import com.seckill.common.security.SecurityContext;
 import com.seckill.module.message.model.entity.UserMessage;
 import com.seckill.module.message.model.vo.MessageVO;
 import com.seckill.module.message.service.UserMessageService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +24,7 @@ import java.util.List;
 /**
  * 消息中心 REST 接口 —— 消息列表、未读数、标记已读。
  */
+@Tag(name = "消息中心", description = "点对点消息查询、未读数、标记已读")
 @RestController
 @RequestMapping("/api/v1/messages")
 @RequiredArgsConstructor
@@ -29,13 +33,11 @@ public class MessageController {
 
     private final UserMessageService userMessageService;
 
-    /**
-     * 分页查询当前用户消息。
-     */
+    @Operation(summary = "消息列表", description = "分页查询当前用户的消息列表")
     @GetMapping
     public Result<List<MessageVO>> listMessages(
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
+            @Parameter(description = "页码（默认 1）") @RequestParam(required = false) Integer page,
+            @Parameter(description = "每页条数（默认 20）") @RequestParam(required = false) Integer size) {
         CurrentUser user = SecurityContext.get();
         if (user == null) throw new BusinessException("未登录");
 
@@ -54,9 +56,7 @@ public class MessageController {
         return Result.success(vos);
     }
 
-    /**
-     * 当前用户未读消息数。
-     */
+    @Operation(summary = "未读消息数", description = "查询当前用户的未读消息数量")
     @GetMapping("/unread/count")
     public Result<Long> countUnread() {
         CurrentUser user = SecurityContext.get();
@@ -64,11 +64,9 @@ public class MessageController {
         return Result.success(userMessageService.countUnread(user.getUserId()));
     }
 
-    /**
-     * 标记消息为已读。
-     */
+    @Operation(summary = "标记已读", description = "将指定消息标记为已读")
     @PutMapping("/{messageId}/read")
-    public Result<Void> markAsRead(@PathVariable Long messageId) {
+    public Result<Void> markAsRead(@Parameter(description = "消息ID") @PathVariable Long messageId) {
         CurrentUser user = SecurityContext.get();
         if (user == null) throw new BusinessException("未登录");
         userMessageService.markAsRead(messageId, user.getUserId());

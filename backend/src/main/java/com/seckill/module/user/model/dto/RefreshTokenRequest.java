@@ -1,5 +1,6 @@
 package com.seckill.module.user.model.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
  *
  * @param refreshToken 刷新令牌
  */
+@Schema(description = "刷新 token 请求")
 public record RefreshTokenRequest(
-        @NotBlank String refreshToken
+        @NotBlank @Schema(description = "刷新令牌") String refreshToken
 ) {}

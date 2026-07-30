@@ -45,7 +45,7 @@ class ActivityControllerTest {
     /** 构建一个用于 mock 返回的 ActivityVO，仅关注可断言的字段 */
     private ActivityVO mockActivityVO(Long activityId, String status) {
         return new ActivityVO(activityId, "活动名", 1L, status,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     // ========================================================================
@@ -286,6 +286,112 @@ class ActivityControllerTest {
             assertThatThrownBy(() -> controller.approveActivity(10L))
                     .isInstanceOf(RuntimeException.class)
                     .hasMessage("数据库连接超时");
+        }
+    }
+
+    // ========================================================================
+    // rejectActivity — 活动驳回
+    // ========================================================================
+
+    @Nested
+    class RejectActivity_Auth {
+
+        @Test
+        void admin_canReject() {
+            SecurityContext.set(admin);
+            ActivityVO vo = mockActivityVO(10L, "draft");
+            vo.setRejectReason("价格不合理");
+            when(activityService.rejectActivity(10L, "价格不合理")).thenReturn(vo);
+
+            // 用 DTO 包裹 reason
+            var request = new com.seckill.module.activity.model.dto.RejectActivityRequest("价格不合理");
+            Result<ActivityVO> result = controller.rejectActivity(10L, request);
+
+            assertThat(result.getCode()).isEqualTo(200);
+            assertThat(result.getData().getStatus()).isEqualTo("draft");
+            assertThat(result.getData().getRejectReason()).isEqualTo("价格不合理");
+        }
+
+        @Test
+        void noAuth_throws() {
+            assertThatThrownBy(() -> controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因")))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("未登录");
+        }
+
+        @Test
+        void merchant_throws() {
+            SecurityContext.set(merchant);
+            assertThatThrownBy(() -> controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因")))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("仅管理员可驳回活动");
+        }
+
+        @Test
+        void user_throws() {
+            SecurityContext.set(user);
+            assertThatThrownBy(() -> controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因")))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("仅管理员可驳回活动");
+        }
+    }
+
+    @Nested
+    class RejectActivity_ParameterPassing {
+
+        @Test
+        void activityId_fromPathVariable() {
+            SecurityContext.set(admin);
+            when(activityService.rejectActivity(99L, "原因"))
+                    .thenReturn(mockActivityVO(99L, "draft"));
+
+            controller.rejectActivity(99L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因"));
+
+            verify(activityService).rejectActivity(99L, "原因");
+        }
+
+        @Test
+        void reason_passedToService() {
+            SecurityContext.set(admin);
+            when(activityService.rejectActivity(10L, "虚假宣传"))
+                    .thenReturn(mockActivityVO(10L, "draft"));
+
+            controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("虚假宣传"));
+
+            verify(activityService).rejectActivity(10L, "虚假宣传");
+        }
+    }
+
+    @Nested
+    class RejectActivity_ExceptionPropagation {
+
+        @Test
+        void businessException_propagates() {
+            SecurityContext.set(admin);
+            when(activityService.rejectActivity(10L, "原因"))
+                    .thenThrow(new BusinessException("当前状态不可驳回"));
+
+            assertThatThrownBy(() -> controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因")))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("当前状态不可驳回");
+        }
+
+        @Test
+        void runtimeException_propagates() {
+            SecurityContext.set(admin);
+            when(activityService.rejectActivity(10L, "原因"))
+                    .thenThrow(new RuntimeException("DB error"));
+
+            assertThatThrownBy(() -> controller.rejectActivity(10L,
+                    new com.seckill.module.activity.model.dto.RejectActivityRequest("原因")))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("DB error");
         }
     }
 

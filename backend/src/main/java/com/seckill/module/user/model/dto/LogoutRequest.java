@@ -1,5 +1,6 @@
 package com.seckill.module.user.model.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
  *
  * @param refreshToken 需撤销的 refresh token
  */
+@Schema(description = "登出请求")
 public record LogoutRequest(
-        @NotBlank String refreshToken
+        @NotBlank @Schema(description = "需撤销的 refresh token") String refreshToken
 ) {}

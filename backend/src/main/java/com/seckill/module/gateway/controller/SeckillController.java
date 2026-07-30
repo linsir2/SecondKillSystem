@@ -8,6 +8,8 @@ import com.seckill.module.gateway.model.dto.SeckillRequest;
 import com.seckill.module.gateway.model.dto.SeckillResponse;
 import com.seckill.module.stock.model.dto.SeckillDeductResult;
 import com.seckill.module.stock.service.SeckillStockService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>请求经 GatewayCheckFilter 校验后进入此 Controller。
  * 核心职责：调 SeckillStockService.deduct() 完成 Redis+Lua 原子预扣，返回 orderToken。
  */
+@Tag(name = "秒杀执行", description = "秒杀抢购入口 —— Redis+Lua 原子预扣库存")
 @RestController
 @RequestMapping("/api/v1/seckill")
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class SeckillController {
 
     private final SeckillStockService seckillStockService;
 
+    @Operation(summary = "执行秒杀", description = "Redis+Lua 原子预扣库存，返回 orderToken。失败时返回明确错误码（售罄/重复购买/超限）")
     @PostMapping("/execute")
     public Result<SeckillResponse> execute(@RequestBody @Valid SeckillRequest request) {
         CurrentUser user = SecurityContext.get();
