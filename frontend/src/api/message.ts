@@ -9,6 +9,6 @@ export async function countUnread(): Promise<number> {
   return get<number>('/messages/unread/count');
 }
 
-export async function markAsRead(messageId: number): Promise<null> {
+export async function markAsRead(messageId: string): Promise<null> {
   return post<null>(`/messages/${messageId}/read`, undefined, 'PUT');
 }

@@ -75,14 +75,14 @@ describe('components / AuthGuard', () => {
 
   it('已登录访问 /auth/login 重定向到 /activity', async () => {
     setTokens('at', 'rt');
-    saveUserInfo({ userId: 1, userName: 'test', role: 'user' });
+    saveUserInfo({ userId: '1', userName: 'test', role: 'user' });
     renderWithRouter(guardRoutes(), { initialEntries: ['/auth/login'] });
     expect(await screen.findByTestId('activity-page')).toBeInTheDocument();
   });
 
   it('已登录访问 /activity 渲染活动页', () => {
     setTokens('at', 'rt');
-    saveUserInfo({ userId: 1, userName: 'test', role: 'user' });
+    saveUserInfo({ userId: '1', userName: 'test', role: 'user' });
     renderWithRouter(guardRoutes(), { initialEntries: ['/activity'] });
     expect(screen.getByTestId('activity-page')).toBeInTheDocument();
   });

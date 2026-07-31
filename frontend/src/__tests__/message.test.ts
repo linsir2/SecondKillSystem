@@ -19,10 +19,10 @@ describe('api / message', () => {
     });
 
   const mockMsg = (overrides?: Partial<MessageVO>): MessageVO => ({
-    messageId: 1,
+    messageId: '1',
     type: 'approval_result',
     content: '您的活动「618秒杀」已通过审核',
-    activityId: 100,
+    activityId: '100',
     read: false,
     createdAt: '2026-07-30T10:00:00',
     ...overrides,
@@ -71,8 +71,8 @@ describe('api / message', () => {
     it('返回多条消息含所有字段', async () => {
       token.setTokens('t', 'r');
       const msgs = [
-        mockMsg({ messageId: 1, type: 'approval_result', content: '已通过', activityId: 100, read: true }),
-        mockMsg({ messageId: 2, type: 'ban_info', content: '您已被封禁', activityId: null, read: false }),
+        mockMsg({ messageId: '1', type: 'approval_result', content: '已通过', activityId: '100', read: true }),
+        mockMsg({ messageId: '2', type: 'ban_info', content: '您已被封禁', activityId: null, read: false }),
       ];
       globalThis.fetch = mockMsgs(msgs);
 
@@ -214,7 +214,7 @@ describe('api / message', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      await markAsRead(1);
+      await markAsRead('1');
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/messages/1/read',
         expect.objectContaining({
@@ -231,7 +231,7 @@ describe('api / message', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      const res = await markAsRead(1);
+      const res = await markAsRead('1');
       expect(res).toBeNull();
     });
 
@@ -244,7 +244,7 @@ describe('api / message', () => {
         json: () => Promise.resolve({ code: 400, message: '消息不存在' }),
       });
 
-      const err = await markAsRead(99999).catch(e => e);
+      const err = await markAsRead('99999').catch(e => e);
       expect(err.code).toBe(400);
     });
 
@@ -254,7 +254,7 @@ describe('api / message', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await markAsRead(1).catch(e => e);
+      const err = await markAsRead('1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
@@ -262,7 +262,7 @@ describe('api / message', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(markAsRead(1)).rejects.toThrow(TypeError);
+      await expect(markAsRead('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -282,7 +282,7 @@ describe('api / message', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      await markAsRead(999999999999999);
+      await markAsRead('999999999999999');
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/messages/999999999999999/read',
         expect.anything(),

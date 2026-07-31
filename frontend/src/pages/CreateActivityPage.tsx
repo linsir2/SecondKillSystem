@@ -12,7 +12,7 @@ import { IconAlert, IconArrowLeft, IconPlus, IconTrash } from '../components/ico
 import { isoFromLocalInput, toLocalInputValue } from '../utils/format';
 
 interface SeckillRow {
-  goodsId: number | null;
+  goodsId: string | null;
   seckillPrice: string;
   stock: string;
   limitNum: string;
@@ -139,7 +139,7 @@ export default function CreateActivityPage() {
         endTime: isoFromLocalInput(endTime),
         description: description.trim(),
         seckillGoodsList: rows.map((r) => ({
-          goodsId: r.goodsId as number,
+          goodsId: r.goodsId as string,
           seckillPrice: Number(r.seckillPrice),
           stock: Number(r.stock),
           limitNum: Number(r.limitNum),
@@ -257,7 +257,7 @@ export default function CreateActivityPage() {
                             invalid={!!re.goodsId}
                             onChange={(e) =>
                               updateRow(idx, {
-                                goodsId: e.target.value === '' ? null : Number(e.target.value),
+                                goodsId: e.target.value === '' ? null : e.target.value,
                               })
                             }
                           >

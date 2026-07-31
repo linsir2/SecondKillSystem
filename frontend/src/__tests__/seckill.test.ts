@@ -26,8 +26,8 @@ describe('api / seckill', () => {
     });
 
   const validReq: SeckillRequest = {
-    activityId: 1,
-    seckillGoodsId: 10,
+    activityId: '1',
+    seckillGoodsId: '10',
     buyCount: 1,
   };
 
@@ -60,8 +60,8 @@ describe('api / seckill', () => {
       await executeSeckill(validReq);
       const callBody = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body;
       const parsed = JSON.parse(callBody);
-      expect(parsed.activityId).toBe(1);
-      expect(parsed.seckillGoodsId).toBe(10);
+      expect(parsed.activityId).toBe('1');
+      expect(parsed.seckillGoodsId).toBe('10');
       expect(parsed.buyCount).toBe(1);
     });
 
@@ -201,7 +201,7 @@ describe('api / seckill', () => {
       const callBody = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );
-      expect(callBody.activityId).toBe(1);
+      expect(callBody.activityId).toBe('1');
     });
   });
 });

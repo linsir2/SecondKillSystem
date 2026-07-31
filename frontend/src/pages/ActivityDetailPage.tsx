@@ -19,14 +19,14 @@ export default function ActivityDetailPage() {
   const { user } = useAuth();
   const [activity, setActivity] = useState<ActivityVO | null>(null);
   const [loading, setLoading] = useState(true);
-  const [seckillId, setSeckillId] = useState<number | null>(null);
+  const [seckillId, setSeckillId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    const activityId = Number(id);
-    if (Number.isNaN(activityId)) {
+    const activityId = id?.trim();
+    if (!activityId) {
       toast.error('活动 ID 无效');
       navigate('/activity');
       return;

@@ -32,7 +32,7 @@ export default function GoodsManagePage() {
   const [form, setForm] = useState<GoodsForm>({ goodsName: '', price: '', stock: '' });
   const [formErrors, setFormErrors] = useState<GoodsFormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function loadGoods() {
     setLoading(true);

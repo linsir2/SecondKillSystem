@@ -264,9 +264,11 @@ public class OrderServiceImpl implements OrderService {
                 new QueryWrapper<SeckillOrder>()
                         .eq("order_token", orderToken)
                         .select("order_no", "status", "user_id"));
-        if (order == null) return null;
-        // 归属校验：不属于当前用户的订单不暴露
-        if (!userId.equals(order.getUserId())) return null;
+        if (order == null || !userId.equals(order.getUserId())) {
+            // 订单未异步建单完成或归属校验失败时，返回空状态供前端继续轮询，
+            // 避免 data:null 导致前端反序列化异常。
+            return new OrderStatusVO(null, null);
+        }
         return new OrderStatusVO(order.getStatus().name(), order.getOrderNo());
     }
 }

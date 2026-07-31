@@ -16,7 +16,7 @@ describe('api / auth', () => {
   const loginVO = {
     accessToken: 'at_xxx',
     refreshToken: 'rt_xxx',
-    userId: 1,
+    userId: '1',
     userName: 'test',
     role: 'user' as const,
   };

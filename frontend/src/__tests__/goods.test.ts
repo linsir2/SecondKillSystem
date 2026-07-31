@@ -9,17 +9,17 @@ describe('api / goods', () => {
   });
 
   const goodsInfo = {
-    goodsId: 1,
+    goodsId: '1',
     goodsName: 'iPhone 15',
     price: 6999,
     stock: 100,
   };
 
-  const goodsVO = { goodsId: 1, goodsName: 'iPhone 15', price: 6999, status: 1, stock: 100, createdAt: '2026-07-30T10:00:00' };
+  const goodsVO = { goodsId: '1', goodsName: 'iPhone 15', price: 6999, status: 1, stock: 100, createdAt: '2026-07-30T10:00:00' };
 
   const goodsVOList = [
     goodsVO,
-    { goodsId: 2, goodsName: 'MacBook Pro', price: 14999, status: 0, stock: 50, createdAt: '2026-07-29T10:00:00' },
+    { goodsId: '2', goodsName: 'MacBook Pro', price: 14999, status: 0, stock: 50, createdAt: '2026-07-29T10:00:00' },
   ];
 
   /* ─── getGoodsDetail ─── */
@@ -34,7 +34,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsInfo }),
       });
 
-      await getGoodsDetail(1);
+      await getGoodsDetail('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/goods/1',
@@ -52,7 +52,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsInfo }),
       });
 
-      const result = await getGoodsDetail(1);
+      const result = await getGoodsDetail('1');
       expect(result).toEqual(goodsInfo);
     });
 
@@ -64,7 +64,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await getGoodsDetail(1).catch((e) => e);
+      const err = await getGoodsDetail('1').catch((e) => e);
       expect(err.code).toBe(401);
       expect(err.message).toMatch(/登录/);
     });
@@ -76,7 +76,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsInfo }),
       });
 
-      await getGoodsDetail(0);
+      await getGoodsDetail('0');
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/goods/0', expect.anything());
     });
 
@@ -87,7 +87,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 400, message: '参数错误' }),
       });
 
-      const err = await getGoodsDetail(-1).catch((e) => e);
+      const err = await getGoodsDetail('-1').catch((e) => e);
       expect(err.code).toBe(400);
     });
 
@@ -95,7 +95,7 @@ describe('api / goods', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(getGoodsDetail(1)).rejects.toThrow(TypeError);
+      await expect(getGoodsDetail('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -118,7 +118,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsInfo }),
       });
 
-      const huge = 9999999999999;
+      const huge = '9999999999999';
       await getGoodsDetail(huge);
       expect(globalThis.fetch).toHaveBeenCalledWith(`/api/v1/goods/${huge}`, expect.anything());
     });
@@ -135,7 +135,7 @@ describe('api / goods', () => {
         }),
       });
 
-      await getGoodsDetail(1);
+      await getGoodsDetail('1');
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
       expect(Object.prototype).toBe(protoBefore);
     });
@@ -151,7 +151,7 @@ describe('api / goods', () => {
         }),
       });
 
-      const result = await getGoodsDetail(1);
+      const result = await getGoodsDetail('1');
       expect(result.goodsName).toBe(xss);
     });
   });
@@ -391,7 +391,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsVO }),
       });
 
-      await updateGoods(1, updateReq);
+      await updateGoods('1', updateReq);
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/goods/1',
@@ -411,7 +411,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: updated }),
       });
 
-      const result = await updateGoods(1, updateReq);
+      const result = await updateGoods('1', updateReq);
       expect(result.goodsName).toBe('更名');
       expect(result.price).toBe(2999);
     });
@@ -425,7 +425,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 400, message: '参数错误' }),
       });
 
-      const err = await updateGoods(-1, updateReq).catch((e) => e);
+      const err = await updateGoods('-1', updateReq).catch((e) => e);
       expect(err.code).toBe(400);
     });
 
@@ -435,7 +435,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await updateGoods(1, updateReq).catch((e) => e);
+      const err = await updateGoods('1', updateReq).catch((e) => e);
       expect(err.code).toBe(401);
     });
 
@@ -443,7 +443,7 @@ describe('api / goods', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(updateGoods(1, updateReq)).rejects.toThrow(TypeError);
+      await expect(updateGoods('1', updateReq)).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -456,7 +456,7 @@ describe('api / goods', () => {
       });
 
       const xss = '<img src=x onerror=alert(1)>';
-      await updateGoods(1, { ...updateReq, goodsName: xss });
+      await updateGoods('1', { ...updateReq, goodsName: xss });
       const body = JSON.parse((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
       expect(body.goodsName).toBe(xss);
     });
@@ -485,7 +485,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsVO }),
       });
 
-      await listGoods(1);
+      await listGoods('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/goods/1/list',
@@ -503,7 +503,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsVO }),
       });
 
-      const result = await listGoods(1);
+      const result = await listGoods('1');
       expect(result).toEqual(goodsVO);
     });
 
@@ -515,7 +515,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await listGoods(1).catch((e) => e);
+      const err = await listGoods('1').catch((e) => e);
       expect(err.code).toBe(401);
     });
 
@@ -523,7 +523,7 @@ describe('api / goods', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(listGoods(1)).rejects.toThrow(TypeError);
+      await expect(listGoods('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -552,7 +552,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsVO }),
       });
 
-      await delistGoods(1);
+      await delistGoods('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/goods/1/delist',
@@ -570,7 +570,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 200, message: 'success', data: goodsVO }),
       });
 
-      const result = await delistGoods(1);
+      const result = await delistGoods('1');
       expect(result).toEqual(goodsVO);
     });
 
@@ -582,7 +582,7 @@ describe('api / goods', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await delistGoods(1).catch((e) => e);
+      const err = await delistGoods('1').catch((e) => e);
       expect(err.code).toBe(401);
     });
 
@@ -590,7 +590,7 @@ describe('api / goods', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(delistGoods(1)).rejects.toThrow(TypeError);
+      await expect(delistGoods('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
