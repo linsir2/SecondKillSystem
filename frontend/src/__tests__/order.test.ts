@@ -11,7 +11,7 @@ describe('api / order', () => {
   /* ─── 工厂 ─── */
 
   /** GET /status 成功响应 */
-  const mockStatus = (status: string | null, orderNo: number | null) =>
+  const mockStatus = (status: string | null, orderNo: string | null) =>
     vi.fn().mockResolvedValue({
       status: 200,
       json: () => Promise.resolve({ code: 200, message: 'success', data: { status, orderNo } }),
@@ -38,7 +38,7 @@ describe('api / order', () => {
 
     it('GET /api/v1/order/status?token=xxx 返回 status 和 orderNo', async () => {
       token.setTokens('t', 'r');
-      globalThis.fetch = mockStatus('PAID', 123456789);
+      globalThis.fetch = mockStatus('PAID', '123456789');
 
       const res = await getOrderStatus('tok_seckill_001');
 
@@ -47,14 +47,14 @@ describe('api / order', () => {
         expect.objectContaining({ method: 'GET' }),
       );
       expect(res.status).toBe('PAID');
-      expect(res.orderNo).toBe(123456789);
+      expect(res.orderNo).toBe('123456789');
     });
 
     it('status 各状态原文透传 (UNPAID / PAID / CANCELLED)', async () => {
       token.setTokens('t', 'r');
 
       for (const s of ['UNPAID', 'PAID', 'CANCELLED'] as const) {
-        globalThis.fetch = mockStatus(s, 1);
+        globalThis.fetch = mockStatus(s, '1');
         const res = await getOrderStatus('tok');
         expect(res.status).toBe(s);
       }
@@ -122,7 +122,7 @@ describe('api / order', () => {
       token.setTokens('user-token', 'r');
       globalThis.fetch = mockCancelOk();
 
-      const res = await cancelOrder(123456789);
+      const res = await cancelOrder('123456789');
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/order/cancel', {
         method: 'POST',
@@ -130,7 +130,7 @@ describe('api / order', () => {
           Authorization: 'Bearer user-token',
           'Content-Type': 'application/json',
         }),
-        body: JSON.stringify({ orderNo: 123456789 }),
+        body: JSON.stringify({ orderNo: '123456789' }),
       });
       expect(res).toBeNull();
     });
@@ -139,7 +139,7 @@ describe('api / order', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockCancelOk();
 
-      const res = await cancelOrder(1);
+      const res = await cancelOrder('1');
       expect(res).toBeNull();
     });
 
@@ -149,7 +149,7 @@ describe('api / order', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockBizError('订单不存在');
 
-      const err = await cancelOrder(99999).catch(e => e);
+      const err = await cancelOrder('99999').catch(e => e);
       expect(err.code).toBe(400);
       expect(err.message).toContain('不存在');
     });
@@ -160,7 +160,7 @@ describe('api / order', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await cancelOrder(1).catch(e => e);
+      const err = await cancelOrder('1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
@@ -181,22 +181,22 @@ describe('api / order', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockCancelOk();
 
-      await cancelOrder(-1);
+      await cancelOrder('-1');
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );
-      expect(body.orderNo).toBe(-1);
+      expect(body.orderNo).toBe('-1');
     });
 
     it('orderNo 零值原样传递', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockCancelOk();
 
-      await cancelOrder(0);
+      await cancelOrder('0');
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );
-      expect(body.orderNo).toBe(0);
+      expect(body.orderNo).toBe('0');
     });
   });
 });

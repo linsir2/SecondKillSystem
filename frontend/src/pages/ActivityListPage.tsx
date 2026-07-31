@@ -16,7 +16,7 @@ export default function ActivityListPage() {
   const navigate = useNavigate();
   const [activities, setActivities] = useState<ActivityVO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,7 +36,7 @@ export default function ActivityListPage() {
     load();
   }, [load]);
 
-  const handleSubmit = async (id: number) => {
+  const handleSubmit = async (id: string) => {
     setBusyId(id);
     try {
       await submitForReview(id);

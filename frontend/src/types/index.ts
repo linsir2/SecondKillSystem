@@ -37,14 +37,14 @@ export interface RegisterRequest {
 }
 
 export interface GoodsInfo {
-  goodsId: number;
+  goodsId: string;
   goodsName: string;
   price: number;
   stock: number;
 }
 
 export interface GoodsVO {
-  goodsId: number;
+  goodsId: string;
   goodsName: string;
   price: number;
   status: number;
@@ -67,8 +67,8 @@ export interface UpdateGoodsRequest {
 /* ─── Activity ─── */
 
 export interface SeckillGoodsVO {
-  seckillGoodsId: number;
-  goodsId: number;
+  seckillGoodsId: string;
+  goodsId: string;
   goodsName: string;
   seckillPrice: number;
   stock: number;
@@ -76,9 +76,9 @@ export interface SeckillGoodsVO {
 }
 
 export interface ActivityVO {
-  activityId: number;
+  activityId: string;
   activityName: string;
-  merchantId: number;
+  merchantId: string;
   status: string;
   startTime: string;
   endTime: string;
@@ -96,7 +96,7 @@ export interface PageVO<T> {
 }
 
 export interface CreateSeckillGoodsItem {
-  goodsId: number;
+  goodsId: string;
   seckillPrice: number;
   stock: number;
   limitNum: number;
@@ -113,8 +113,8 @@ export interface CreateActivityRequest {
 /* ─── Seckill ─── */
 
 export interface SeckillRequest {
-  activityId: number;
-  seckillGoodsId: number;
+  activityId: string;
+  seckillGoodsId: string;
   buyCount: number;
 }
 
@@ -139,10 +139,10 @@ export interface PayResponse {
 /* ─── Message ─── */
 
 export interface MessageVO {
-  messageId: number;
+  messageId: string;
   type: string;
   content: string;
-  activityId: number | null;
+  activityId: string | null;
   read: boolean;
   createdAt: string;
 }

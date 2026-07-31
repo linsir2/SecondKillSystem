@@ -33,7 +33,7 @@ describe('api / payment', () => {
       token.setTokens('user-token', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      const res = await pay(123456789, 1);
+      const res = await pay('123456789', '1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith('/api/v1/payment/pay', {
         method: 'POST',
@@ -41,7 +41,7 @@ describe('api / payment', () => {
           Authorization: 'Bearer user-token',
           'Content-Type': 'application/json',
         }),
-        body: JSON.stringify({ orderNo: 123456789, userId: 1 }),
+        body: JSON.stringify({ orderNo: '123456789', userId: '1' }),
       });
       expect(res.success).toBe(true);
       expect(res.message).toBe('支付成功');
@@ -51,7 +51,7 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      const res = await pay(1, 1);
+      const res = await pay('1', '1');
       expect(res.success).toBe(true);
     });
 
@@ -59,7 +59,7 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(false, '余额不足');
 
-      const res = await pay(1, 1);
+      const res = await pay('1', '1');
       expect(res.success).toBe(false);
       expect(res.message).toContain('余额不足');
     });
@@ -68,7 +68,7 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(false, '支付失败：账户异常');
 
-      const res = await pay(1, 1);
+      const res = await pay('1', '1');
       expect(res.message).toBe('支付失败：账户异常');
     });
 
@@ -76,11 +76,11 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      await pay(999, 42);
+      await pay('999', '42');
       const callArg = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
       const body = JSON.parse(callArg.body);
-      expect(body.orderNo).toBe(999);
-      expect(body.userId).toBe(42);
+      expect(body.orderNo).toBe('999');
+      expect(body.userId).toBe('42');
     });
 
     /* ─── 边界 ─── */
@@ -89,7 +89,7 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockBizError('订单不存在');
 
-      const err = await pay(99999, 1).catch(e => e);
+      const err = await pay('99999', '1').catch(e => e);
       expect(err.code).toBe(400);
       expect(err.message).toContain('不存在');
     });
@@ -100,7 +100,7 @@ describe('api / payment', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await pay(1, 1).catch(e => e);
+      const err = await pay('1', '1').catch(e => e);
       expect(err.code).toBe(401);
     });
 
@@ -108,7 +108,7 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(pay(1, 1)).rejects.toThrow(TypeError);
+      await expect(pay('1', '1')).rejects.toThrow(TypeError);
     });
 
     it('500 服务器错误 → ApiError', async () => {
@@ -118,7 +118,7 @@ describe('api / payment', () => {
         json: () => Promise.resolve({ code: 500, message: '服务器内部错误', data: null, errors: null }),
       });
 
-      const err = await pay(1, 1).catch(e => e);
+      const err = await pay('1', '1').catch(e => e);
       expect(err.code).toBe(500);
     });
 
@@ -128,9 +128,9 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      await (pay as (orderNo: unknown, userId: number) => Promise<{ success: boolean; message: string }>)(
+      await (pay as (orderNo: unknown, userId: unknown) => Promise<{ success: boolean; message: string }>)(
         '1 OR 1=1',
-        1,
+        '1',
       );
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
@@ -142,22 +142,22 @@ describe('api / payment', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      await pay(-1, 1);
+      await pay('-1', '1');
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );
-      expect(body.orderNo).toBe(-1);
+      expect(body.orderNo).toBe('-1');
     });
 
     it('orderNo 零值原样传递', async () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockPayResponse(true, '支付成功');
 
-      await pay(0, 1);
+      await pay('0', '1');
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );
-      expect(body.orderNo).toBe(0);
+      expect(body.orderNo).toBe('0');
     });
 
     it('NaN/Infinity 被 JSON.stringify 转为 null 原样传递', async () => {
@@ -166,7 +166,7 @@ describe('api / payment', () => {
 
       // JSON.stringify(NaN) → 'null'，JSON.stringify(Infinity) → 'null'
       // 后端将会收到 null 并自行处理
-      await pay(NaN, Infinity);
+      await (pay as (orderNo: unknown, userId: unknown) => Promise<unknown>)(NaN, Infinity);
       const body = JSON.parse(
         (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );

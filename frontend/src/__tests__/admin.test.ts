@@ -23,7 +23,7 @@ describe('api / admin', () => {
       token.setTokens('admin-token', 'admin-refresh');
       globalThis.fetch = mockNull();
 
-      await banUser(1);
+      await banUser('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/admin/users/1/ban',
@@ -38,7 +38,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      const result = await banUser(1);
+      const result = await banUser('1');
       expect(result).toBeNull();
     });
 
@@ -50,7 +50,7 @@ describe('api / admin', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await banUser(1).catch((e) => e);
+      const err = await banUser('1').catch((e) => e);
       expect(err.code).toBe(401);
     });
 
@@ -58,7 +58,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(banUser(1)).rejects.toThrow(TypeError);
+      await expect(banUser('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -75,7 +75,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      const huge = 9999999999999;
+      const huge = '9999999999999';
       await banUser(huge);
       expect(globalThis.fetch).toHaveBeenCalledWith(`/api/v1/admin/users/${huge}/ban`, expect.anything());
     });
@@ -90,7 +90,7 @@ describe('api / admin', () => {
       token.setTokens('admin-token', 'admin-refresh');
       globalThis.fetch = mockNull();
 
-      await unbanUser(1);
+      await unbanUser('1');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/v1/admin/users/1/unban',
@@ -105,7 +105,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      const result = await unbanUser(1);
+      const result = await unbanUser('1');
       expect(result).toBeNull();
     });
 
@@ -117,7 +117,7 @@ describe('api / admin', () => {
         json: () => Promise.resolve({ code: 401, message: '未登录' }),
       });
 
-      const err = await unbanUser(1).catch((e) => e);
+      const err = await unbanUser('1').catch((e) => e);
       expect(err.code).toBe(401);
     });
 
@@ -125,7 +125,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
-      await expect(unbanUser(1)).rejects.toThrow(TypeError);
+      await expect(unbanUser('1')).rejects.toThrow(TypeError);
     });
 
     /* ─── 攻击场景 ─── */
@@ -142,7 +142,7 @@ describe('api / admin', () => {
       token.setTokens('t', 'r');
       globalThis.fetch = mockNull();
 
-      const huge = 9999999999999;
+      const huge = '9999999999999';
       await unbanUser(huge);
       expect(globalThis.fetch).toHaveBeenCalledWith(`/api/v1/admin/users/${huge}/unban`, expect.anything());
     });

@@ -1,8 +1,8 @@
--- Local demo data
+-- Local demo data（默认密码：12345678）
 INSERT INTO sys_user (user_id, user_name, email, password, role, ban_status) VALUES
-(1001, '张买家', 'user@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$fHuqGw5uszTukpx+DHDiPQ$7actzabrsD6XghdZ5vZP5A8pNqIfsT82oEVpE6YHdTw', 'user', 'normal'),
-(1002, '极客数码', 'merchant@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$jqv67h8lgkWV7dv64se1Rg$qpK87uhFn3i1+dF53ukObaGJIbujiL2PPC6PKRNuTEE', 'merchant', 'normal'),
-(1003, '管理员', 'admin@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$aVDLQgOS0GFMSUYOTWn5YQ$VUes+RCzVV9zDx5PLyM/KwQmU2JguIJOY6Sm5bom6mY', 'admin', 'normal');
+(1001, '张买家', 'user@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$ShgUQw8eVB0HK4MOVgCSFQ$OEg6aGYhwHoBL5UG5nLuxAIGdUNC2Iy7FCUrfEskkbU', 'user', 'normal'),
+(1002, '极客数码', 'merchant@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$ExHjNVmk4i0Y2zhzCDMxUw$z/ezU6G3rPZc6wiudrfdj4limj7vNQ1jaLzQ0SEC8A4', 'merchant', 'normal'),
+(1003, '管理员', 'admin@seckill.com', '$argon2id$v=19$m=65536,t=3,p=1$2orvC0AvUc3IQo3HQwzFzg$D+Y5WFuljoNk6F62/G7eB/gcG/OVxW3yTlh0ayCf6BM', 'admin', 'normal');
 
 INSERT INTO goods (goods_id, goods_name, merchant_id, price, status, stock) VALUES
 (5001, 'iPhone 16 Pro 256G', 1002, 8999.00, 1, 500),

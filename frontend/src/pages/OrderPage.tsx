@@ -22,6 +22,7 @@ export default function OrderPage() {
 
   const [status, setStatus] = useState<OrderStatusVO | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pollCount, setPollCount] = useState(0);
@@ -56,7 +57,8 @@ export default function OrderPage() {
         timer = window.setTimeout(poll, POLL_INTERVAL);
       } catch (err) {
         if (!alive) return;
-        toast.error(err instanceof Error ? err.message : '查询订单状态失败');
+        const msg = err instanceof Error ? err.message : '查询订单状态失败';
+        setError(msg);
         setLoading(false);
       }
     };
@@ -128,7 +130,20 @@ export default function OrderPage() {
     );
   }
 
-  const current = status?.status;
+  if (error || !status) {
+    return (
+      <div className="card card-pad col gap-16" style={{ textAlign: 'center', padding: 64 }}>
+        <IconXCircle width={48} height={48} style={{ color: 'var(--danger)' }} />
+        <div className="strong">订单查询失败</div>
+        <div className="muted">{error || '无法获取订单状态，请稍后到消息中心查看结果'}</div>
+        <Button variant="primary" onClick={() => navigate('/messages')}>
+          去消息中心
+        </Button>
+      </div>
+    );
+  }
+
+  const current = status.status;
 
   return (
     <div>
@@ -164,7 +179,7 @@ export default function OrderPage() {
               <IconClock width={28} height={28} />
             </div>
             <h2 className="mt-0">订单待支付</h2>
-            <div className="muted">订单号：{status!.orderNo}</div>
+            <div className="muted">订单号：{status.orderNo}</div>
             <div className="muted">请在 1 分钟内完成支付，超时将自动取消</div>
           </div>
 
@@ -192,7 +207,7 @@ export default function OrderPage() {
           </div>
           <div>
             <h2 className="mt-0">支付成功</h2>
-            <div className="muted">订单号：{status!.orderNo}</div>
+            <div className="muted">订单号：{status.orderNo}</div>
           </div>
           <Button variant="primary" onClick={() => navigate('/activity')}>
             继续逛逛
@@ -208,7 +223,7 @@ export default function OrderPage() {
           </div>
           <div>
             <h2 className="mt-0">订单已取消</h2>
-            <div className="muted">订单号：{status!.orderNo}</div>
+            <div className="muted">订单号：{status.orderNo}</div>
           </div>
           <Button variant="primary" onClick={() => navigate('/activity')}>
             返回活动广场

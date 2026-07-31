@@ -9,7 +9,7 @@ describe('api / user', () => {
   });
 
   const userInfoVO = {
-    userId: 1,
+    userId: '1',
     userName: 'test',
     email: 'a@b.com',
     role: 'user' as const,

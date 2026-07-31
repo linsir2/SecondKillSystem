@@ -17,7 +17,7 @@ export default function AdminPage() {
 
   const [activities, setActivities] = useState<ActivityVO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<ActivityVO | null>(null);
   const [reason, setReason] = useState('');
 
@@ -45,7 +45,7 @@ export default function AdminPage() {
   const pending = activities.filter((a) => a.status === 'pending');
   const recent = activities.filter((a) => RECENT_STATUSES.includes(a.status)).slice(0, 10);
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: string) => {
     setBusyId(id);
     try {
       await approveActivity(id);

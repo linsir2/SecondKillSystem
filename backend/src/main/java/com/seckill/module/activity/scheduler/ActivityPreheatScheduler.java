@@ -17,10 +17,11 @@ import java.util.List;
 /**
  * 活动预热定时任务。
  *
- * <p>每分钟扫描 {@code preheating} 状态的活动：</p>
+ * <p>每分钟扫描 {@code preheating} / {@code running} 状态的活动：</p>
  * <ul>
- *   <li>距开始 ≤10 分钟 → 预热库存 + 黑名单到 Redis（幂等）</li>
+ *   <li>距开始 ≤10 分钟 → 预热库存 + 限购到 Redis（幂等）</li>
  *   <li>已到开始时间 → 转换 {@code preheating → running}</li>
+ *   <li>对 {@code running} 活动兜底预热，防止服务重启后 Redis 库存丢失</li>
  * </ul>
  *
  * <p>单个活动失败不影响其他活动。</p>
@@ -38,6 +39,7 @@ public class ActivityPreheatScheduler {
     public void processActivities() {
         LocalDateTime now = LocalDateTime.now();
         phase1_preheatAndStart(now);
+        phase1b_reheatRunning(now);
         phase2_endExpired(now);
         phase3_restoreStock(now);
     }
@@ -60,6 +62,23 @@ public class ActivityPreheatScheduler {
                 }
             } catch (Exception e) {
                 log.error("Failed to process activity {}", a.getActivityId(), e);
+            }
+        }
+    }
+
+    /**
+     * 兜底：对 running 活动做幂等预热，避免服务重启后 Redis 库存为空导致秒杀失败。
+     */
+    private void phase1b_reheatRunning(LocalDateTime now) {
+        List<Activity> activities = activityMapper.selectList(
+                new LambdaQueryWrapper<Activity>()
+                        .eq(Activity::getStatus, ActivityStatus.running));
+
+        for (Activity a : activities) {
+            try {
+                activityService.preheatActivity(a.getActivityId());
+            } catch (Exception e) {
+                log.error("Failed to reheat running activity {}", a.getActivityId(), e);
             }
         }
     }

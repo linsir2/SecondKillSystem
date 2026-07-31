@@ -40,13 +40,13 @@ function renderWithProvider(ui: ReactNode) {
 const mockLoginVO = {
   accessToken: 'at_xxx',
   refreshToken: 'rt_xxx',
-  userId: 1,
+  userId: '1',
   userName: 'tester',
   role: 'user' as const,
 };
 
 const mockUserInfoVO = {
-  userId: 1,
+  userId: '1',
   userName: 'tester',
   email: 'tester@test.com',
   role: 'user' as const,
@@ -77,7 +77,7 @@ describe('stores / authStore', () => {
 
   it('localStorage 有 token + userInfo 时恢复登录态', () => {
     setTokens('some-token', 'some-refresh');
-    saveUserInfo({ userId: 5, userName: 'restored', role: 'merchant' });
+    saveUserInfo({ userId: '5', userName: 'restored', role: 'merchant' });
     renderWithProvider(<TestConsumer />);
     expect(screen.getByTestId('isAuth').textContent).toBe('true');
     expect(screen.getByTestId('userId').textContent).toBe('5');
